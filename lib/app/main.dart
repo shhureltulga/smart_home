@@ -8,9 +8,9 @@ import 'routes.dart';
 import 'theme.dart';
 
 String _baseUrl() {
-  if (kIsWeb) return 'https://api.habea.mn';
-  if (Platform.isAndroid) return 'https://api.habea.mn';
-  return 'https://api.habea.mn';
+  if (kIsWeb) return 'http://122.201.20.196:4000';
+  if (Platform.isAndroid) return 'http://122.201.20.196:4000';
+  return 'http://122.201.20.196:4000';
 }
 
 
