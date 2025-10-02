@@ -1,25 +1,15 @@
-import 'dart:io' show Platform;
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'data/api_client.dart';
-import 'modules/auth/auth_controller.dart';
+import 'package:get_storage/get_storage.dart';
+
 import 'routes.dart';
 import 'theme.dart';
 
-String _baseUrl() {
-  if (kIsWeb) return 'http://122.201.20.196:4000';
-  if (Platform.isAndroid) return 'http://122.201.20.196:4000';
-  return 'http://122.201.20.196:4000';
-}
-
-
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await GetStorage.init();
 
-  final api = ApiClient(_baseUrl());
-  Get.put<ApiClient>(api);
-  Get.put<AuthController>(AuthController(api));
+  AppRoutes.initBindings(); // ApiClient, AuthService, AuthController г.м. энд бэлэн болно
 
   runApp(const _App());
 }
