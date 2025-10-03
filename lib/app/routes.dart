@@ -13,11 +13,13 @@ import 'modules/sites/sites_controller.dart';
 import 'modules/sites/sites_service.dart';
 
 import 'modules/dashboard/dashboard_screen.dart';
+import 'modules/shell/main_shell.dart';
 
 class AppRoutes {
   static const login = '/login';
   static const selectSite = '/select-site';
   static const dashboard = '/dashboard';
+  static const main = '/main';           // 🆕 MainShell
 
   static final pages = <GetPage>[
     GetPage(name: login, page: () => const LoginScreen()),
@@ -37,6 +39,7 @@ class AppRoutes {
     ),
 
     GetPage(name: dashboard, page: () => const DashboardScreen()),
+    GetPage(name: '/main', page: () => const MainShell()),
   ];
 
   /// Апп асаахад нэг удаа дуудна — үндсэн сервисүүдээ энд бэлдэнэ.

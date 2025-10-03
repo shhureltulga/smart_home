@@ -1,6 +1,8 @@
 import 'package:dio/dio.dart';
 import 'package:smart_home/app/core/network/http_client.dart';
 import 'package:smart_home/app/data/models/site.dart';
+import 'package:smart_home/app/core/config/endpoints.dart';
+import 'package:smart_home/app/data/models/site_overview.dart';
 
 class SitesService {
   final ApiClient _api;
@@ -51,5 +53,19 @@ class SitesService {
       print('[SitesService] fetchSites error: $e');
       rethrow;
     }
+  }
+  Future<SiteOverview> fetchOverview(String siteId) async {
+    final r = await _api.get(ApiPaths.siteOverview(siteId), withAuth: true);
+    final data = r.data as Map<String, dynamic>?;
+
+    if (data?['ok'] == true) {
+      return SiteOverview.fromJson(data!);
+    }
+    throw DioException(
+      requestOptions: r.requestOptions,
+      response: r,
+      message: 'fetchOverview_failed',
+      type: DioExceptionType.badResponse,
+    );
   }
 }

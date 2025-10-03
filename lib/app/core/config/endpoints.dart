@@ -14,6 +14,7 @@ class ApiPaths {
   static const sensorsLatest = '/api/sensors/latest';
   static const sensorsReadings = '/api/sensors/readings';
 
+  static String siteOverview(String siteId) => '/api/sites/$siteId/overview';
   // (сонголт) admin команд
   static const edgeCommands = '/api/edge/commands';
 }
