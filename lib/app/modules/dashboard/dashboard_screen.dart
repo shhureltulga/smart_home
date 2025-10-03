@@ -153,14 +153,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                       const SizedBox(height: 12),
 
-                      // --- KPI Header (2 том + 3 нэгтгэсэн strip)
                       _DashboardHeader(
-                        outsideTemp: 22.3,     // TODO: бодитоор холбоно
-                        humidity: 93.5,        // TODO
-                        weatherTemp: 23,
-                        windSpeed: 9,
-                        rainProb: 40,
-                      ),
+                        outsideTemp: ov.weather?.tempC ?? 0,
+                        humidity: ov.weather?.humidity ?? 0,
+                        weatherTemp: (ov.weather?.tempC ?? 0).round(),
+                        windSpeed: (ov.weather?.windSpeedMs ?? 0).round(),
+                        rainProb: (ov.weather?.rainProb ?? 0).round(),
+                        ),
+
                       const SizedBox(height: 12),
 
                       // --- Хураангуй статистик (Rooms/Devices)
@@ -234,13 +234,13 @@ class _DashboardHeader extends StatelessWidget {
   final int rainProb;  // %
 
   const _DashboardHeader({
+    super.key,
     required this.outsideTemp,
     required this.humidity,
     required this.weatherTemp,
     required this.windSpeed,
     required this.rainProb,
   });
-
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
