@@ -8,6 +8,8 @@ import 'package:smart_home/app/modules/sites/sites_service.dart';
 import 'package:smart_home/app/data/models/site_overview.dart';
 import 'package:smart_home/app/theme.dart';
 import 'package:smart_home/app/modules/shell/root_scaffold.dart';
+import 'package:smart_home/app/widgets/pbd_card.dart';
+
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -17,6 +19,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   String? _siteId;
+  String? _jwt;
   String _siteTitle = 'Dashboard'; 
   Future<SiteOverview>? _future;
   Timer? _ticker;
@@ -26,6 +29,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     super.initState();
     Future.microtask(() async {
       _siteId = await SecureStore.instance.read(SecureKeys.selectedSiteId);
+      _jwt    = await SecureStore.instance.read(SecureKeys.accessToken);
+
       if (mounted) setState(() {});
       _refetch();
 
@@ -162,6 +167,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ),
 
                       const SizedBox(height: 12),
+                        // ListView children дотор (Latest sensors-оос дээш):
+                        if (_siteId != null && _jwt != null) ...[
+                        const SizedBox(height: 12),
+                        PbdCard(
+                            baseUrl: "https://api.habea.mn",
+                            siteId: _siteId!,
+                            jwt: _jwt!,
+                            height: 260,
+                        ),
+                        ],
 
                       // --- Хураангуй статистик (Rooms/Devices)
                       Row(
@@ -184,7 +199,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ],
                       ),
                       const SizedBox(height: 12),
-
+                   
                       // --- Сүүлийн мэдрэгчүүд
                       Container(
                         decoration: BoxDecoration(

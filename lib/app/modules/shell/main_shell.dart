@@ -57,12 +57,12 @@ class _MainShellState extends State<MainShell> {
               NavigationDestination(
                 icon: Icon(Icons.dashboard_outlined),
                 selectedIcon: Icon(Icons.dashboard),
-                label: 'Нүүр',
+                label: 'Гэр',
               ),
               NavigationDestination(
                 icon: Icon(Icons.favorite_border),
                 selectedIcon: Icon(Icons.favorite),
-                label: 'Эрүүл мэнд',
+                label: 'Бие',
               ),
               NavigationDestination(
                 icon: Icon(Icons.payments_outlined),

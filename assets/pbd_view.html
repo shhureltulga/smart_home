@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
+  <title>PBD 3D – Walls Only (with grid & edges)</title>
+  <style>
+    html,body{margin:0;background:#0f1115;color:#eee}
+    #wrap{position:relative;width:100vw;height:100vh;overflow:hidden}
+    #loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font:14px/1.4 system-ui;color:#9aa4b2}
+  </style>
+  <script type="importmap">
+    { "imports": { "three": "https://unpkg.com/three@0.161.0/build/three.module.js" } }
+  </script>
+</head>
+<body>
+  <div id="wrap"><div id="loading">Loading…</div></div>
+
+  <script type="module">
+    import * as THREE from "https://unpkg.com/three@0.161.0/build/three.module.js";
+    import { OrbitControls } from "https://unpkg.com/three@0.161.0/examples/jsm/controls/OrbitControls.js";
+
+    function log(m){ try{ APPLOG.postMessage(String(m)); }catch(_){} }
+    window.onerror = m => { const el=document.getElementById("loading"); if(el) el.textContent="ERR: "+m; log("JS ERROR: "+m); };
+
+    const S={renderer:null,scene:null,cam:null,controls:null,size:{w:0,h:0}};
+    const wrap=document.getElementById("wrap"); const loading=document.getElementById("loading");
+    const MODEL = { group: new THREE.Group(), bbox: new THREE.Box3() };
+
+    /* ---------- ENTRY ---------- */
+    window.start = async function(){
+      try{
+        const { baseUrl, siteId, jwt } = window.INIT || {};
+        if(!baseUrl || !siteId || !jwt) throw new Error("INIT missing");
+
+        loading.textContent="Fetching latest…";
+        const latestRes = await fetch(`${baseUrl}/api/site/${siteId}/pbd/latest`, {
+          headers:{ Authorization:`Bearer ${jwt}` }
+        });
+        if(!latestRes.ok) throw new Error('latest failed '+latestRes.status);
+        const latest = await latestRes.json();
+
+        loading.textContent="Downloading PBD…";
+        const pbd = await fetch(`${baseUrl}${latest.url}`).then(r=>r.json());
+
+        init3D();
+        drawWallsOnly(pbd);
+        centerCameraToModel();
+        loading.remove();
+        animate();
+      }catch(e){
+        loading.textContent="PBD ачаалж чадсангүй: "+(e.message||e);
+        log('FAIL: '+(e.message||e));
+      }
+    };
+
+    /* ---------- 3D SCENE ---------- */
+    function init3D(){
+      S.size.w=wrap.clientWidth; S.size.h=wrap.clientHeight;
+
+      S.scene=new THREE.Scene();
+      S.scene.background=new THREE.Color("#0f1115");
+
+      S.cam=new THREE.PerspectiveCamera(45, S.size.w/S.size.h, 0.1, 2000);
+      S.cam.position.set(8,6,10);
+
+      S.renderer=new THREE.WebGLRenderer({antialias:true});
+      S.renderer.setSize(S.size.w,S.size.h);
+      S.renderer.setPixelRatio(Math.min(2, window.devicePixelRatio||1));
+      wrap.appendChild(S.renderer.domElement);
+
+      // зөөлөн гэрэл
+      S.scene.add(new THREE.HemisphereLight(0xffffff, 0x1a1a1a, 0.95));
+      const dir=new THREE.DirectionalLight(0xffffff,0.55);
+      dir.position.set(6,10,6);
+      S.scene.add(dir);
+
+      // ✅ Grid – шалнаас ÖCHYYXEN доош, тэгээд үргэлж харагдана
+      const grid=new THREE.GridHelper(50,50,0x2a2a2a,0x202020);
+      grid.position.y = -0.01;
+      S.scene.add(grid);
+      (Array.isArray(grid.material)?grid.material:[grid.material]).forEach(m=>{
+        m.depthWrite = true; m.depthTest = true;
+      });
+
+      S.controls=new OrbitControls(S.cam, S.renderer.domElement);
+      S.controls.enableDamping=true;
+      S.controls.dampingFactor=0.08;
+      S.controls.minDistance=2;
+      S.controls.maxDistance=200;
+
+      S.scene.add(MODEL.group);
+
+      window.addEventListener("resize", ()=>{
+        S.size.w=wrap.clientWidth; S.size.h=wrap.clientHeight;
+        S.cam.aspect=S.size.w/S.size.h; S.cam.updateProjectionMatrix();
+        S.renderer.setSize(S.size.w,S.size.h);
+      });
+    }
+
+    /* ---------- WALLS ONLY (no caps) + edge highlight ---------- */
+    function drawWallsOnly(pbd){
+      const wallH = pbd.global?.ceilingHeight ?? 2.8;
+      const rooms  = pbd.rooms || [];
+
+      // Cap (дээш/доош) – бүрэн нууж, depth ч бичихгүй
+      const capInvisible = new THREE.MeshBasicMaterial({ visible:false, depthWrite:false, depthTest:true });
+
+      // Ханын өнгөт тунгалаг материал
+      const wallColorMat = new THREE.MeshPhongMaterial({
+        color: 0xF1A64B,            // арай тод улбар
+        transparent: true,
+        opacity: 0.26,              // илүү тунгалаг
+        side: THREE.DoubleSide,
+        depthWrite: false,
+        depthTest: true
+      });
+
+      // Depth-only ханын материал (side-д л бичнэ)
+      const wallDepthMat = new THREE.MeshBasicMaterial({
+        colorWrite:false, depthWrite:true, depthTest:true
+      });
+
+      // Ирмэгийн (outline) материал – ханан дээр сайхан ялгарна
+      const edgeMat = new THREE.LineBasicMaterial({
+        color: 0xF1A64B,
+        transparent: true,
+        opacity: 0.9,
+        depthTest: true,
+        polygonOffset: true,
+        polygonOffsetFactor: -2,
+        polygonOffsetUnits: -2
+      });
+
+      for(const r of rooms){
+        const pts=(r.polygon||[]).map(([x,z])=>new THREE.Vector2(x,z));
+        if(pts.length<3) continue;
+
+        const shape=new THREE.Shape(pts);
+        const geo=new THREE.ExtrudeGeometry(shape,{ depth: wallH, bevelEnabled:false, steps:1 });
+        geo.rotateX(-Math.PI/2); // Y дээш
+
+        // a) depth-only → зөвхөн side (index 2)
+        const depthMesh = new THREE.Mesh(geo, [capInvisible, capInvisible, wallDepthMat]);
+        MODEL.group.add(depthMesh);
+
+        // b) өнгөт тунгалаг ханын mesh → зөвхөн side (index 2)
+        const colorMesh = new THREE.Mesh(geo, [capInvisible, capInvisible, wallColorMat]);
+        MODEL.group.add(colorMesh);
+
+        // c) ✨ Ирмэгийн шугам: EdgesGeometry top+vertical-уудыг автоматаар сонгоно
+        const edges = new THREE.EdgesGeometry(geo, 10); // thresholdAngle
+        const edgeLines = new THREE.LineSegments(edges, edgeMat);
+        MODEL.group.add(edgeLines);
+      }
+
+      MODEL.bbox.setFromObject(MODEL.group);
+    }
+
+    /* ---------- CENTER & FIT ---------- */
+    function centerCameraToModel(){
+      const c = MODEL.bbox.getCenter(new THREE.Vector3());
+      if (!isFinite(c.x) || !isFinite(c.z)) return;
+
+      // XY хавтгайд төвлөрүүлэх (манай XY = XZ)
+      MODEL.group.position.x -= c.x;
+      MODEL.group.position.z -= c.z;
+
+      const s = MODEL.bbox.getSize(new THREE.Vector3());
+      const dia = Math.sqrt(s.x*s.x + s.z*s.z);
+      const dist = Math.max(6, dia*1.2);
+
+      S.controls.target.set(0, 0, 0);
+      S.cam.position.set(dist*0.6, dist*0.5, dist*0.6);
+      S.controls.update();
+    }
+
+    /* ---------- LOOP ---------- */
+    function animate(){
+      requestAnimationFrame(animate);
+      S.controls.update();
+      S.renderer.render(S.scene,S.cam);
+    }
+  </script>
+</body>
+</html>
