@@ -167,15 +167,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ),
 
                       const SizedBox(height: 12),
+                    
                         // ListView children дотор (Latest sensors-оос дээш):
-                        if (_siteId != null && _jwt != null) ...[
-                        const SizedBox(height: 12),
-                        PbdCard(
-                            baseUrl: "https://api.habea.mn",
-                            siteId: _siteId!,
-                            jwt: _jwt!,
-                            height: 260,
-                        ),
+                       if (_siteId != null && _jwt != null) ...[
+                          const SizedBox(height: 12),
+                       PbdCard(
+                                baseUrl: "https://api.habea.mn",
+                                siteId: _siteId!,
+                                jwt: _jwt!,
+                                height: 300,
+                              ),
+
                         ],
 
                       // --- Хураангуй статистик (Rooms/Devices)

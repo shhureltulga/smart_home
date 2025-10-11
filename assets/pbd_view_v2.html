@@ -1,0 +1,497 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>PBD 3D – Neon Blueprint + Lights + Openings</title>
+  <style>
+    html,body{margin:0;background:#071018;color:#b8d9e9}
+    #wrap{position:relative;width:100vw;height:100vh;overflow:hidden}
+
+    /* Fullscreen */
+    #wrap.fs{
+      position:fixed !important; inset:0 !important;
+      width:100vw !important; height:100dvh !important;
+      z-index:2147483647 !important; background:#071018;
+    }
+    #wrap.fs #ui{
+      position:fixed !important; top:10px !important; right:10px !important; left:auto !important;
+      z-index:2147483647 !important; pointer-events:auto;
+    }
+
+    #ui{position:absolute;right:10px;top:10px;z-index:10;background:#0b1520cc;
+        padding:8px 10px;border-radius:10px;font:13px system-ui}
+    #ui label{margin-left:8px}
+    #loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#7aa7be}
+    #wrap::after{content:"";position:absolute;inset:0;pointer-events:none;
+      background:radial-gradient(1200px 600px at 70% -20%, #1a4b62aa, transparent 60%),
+                 radial-gradient(900px 500px at 10% 110%, #0e2a38aa, transparent 55%);
+      mix-blend-mode:screen;opacity:.35}
+
+    /* FS/Exit товч */
+    #btnFS,#btnExitFS{margin-left:8px;padding:2px 8px;border:0;border-radius:6px;background:#123;color:#b8d9e9}
+    #btnFS:hover,#btnExitFS:hover{background:#1a2c3a}
+
+    /* Lights panel */
+    #lightsPanel{position:absolute; right:10px; top:54px; z-index:11; background:#0b1520cc;
+      border-radius:12px; padding:10px; width:240px; font:13px system-ui; display:none}
+    #lightsList{max-height:260px; overflow:auto}
+    .light-row{display:flex; align-items:center; gap:6px; margin:6px 0; padding:2px 4px; border-radius:6px}
+    .light-row.hover{background:#0f1f2b}
+    .light-name{width:80px;opacity:.9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .light-range{flex:1}
+  </style>
+
+  <script type="importmap">{
+    "imports":{
+      "three":"https://unpkg.com/three@0.161.0/build/three.module.js",
+      "three/examples/jsm/controls/OrbitControls.js":"https://unpkg.com/three@0.161.0/examples/jsm/controls/OrbitControls.js",
+      "three/examples/jsm/renderers/CSS2DRenderer.js":"https://unpkg.com/three@0.161.0/examples/jsm/renderers/CSS2DRenderer.js"
+    }
+  }</script>
+</head>
+<body>
+
+<div id="wrap">
+  <div id="loading">Loading…</div>
+
+  <!-- UI-г wrap ДОТОР нь байрлуулсан -->
+  <div id="ui">
+    <button id="btnFit">Fit</button>
+    <label><input id="chkFloor"  type="checkbox" checked> Floor</label>
+    <label><input id="chkWalls"  type="checkbox" checked> Walls</label>
+    <label><input id="chkLights" type="checkbox" checked> Lights</label>
+    <label><input id="chkCurtains" type="checkbox" checked> Curtains</label>
+    <label><input id="chkLabels" type="checkbox" checked> Labels</label>
+
+    <button id="btnLightsCfg" style="margin-left:8px;">⚡ Lights…</button>
+    <button id="btnFS"    hidden="true"  title="Fullscreen">⤢</button>
+    <button id="btnExitFS" hidden="true" title="Exit" style="display:none">⤡</button>
+
+    <div id="lightsPanel">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+        <strong>Lights</strong>
+        <button id="btnCloseLights" style="all:unset;cursor:pointer;padding:4px 6px;background:#12202b;border-radius:6px;">×</button>
+      </div>
+      <div id="lightsList"></div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { CSS2DRenderer, CSS2DObject } from "three/examples/jsm/renderers/CSS2DRenderer.js";
+
+const wrap = document.getElementById('wrap');
+const loading = document.getElementById('loading');
+
+const THEME = { bg:'#071018', fog:'#071018', grid1:0x123241, grid2:0x0b2330, wall:0x59D6FF, edge:0xB3ECFF, roomLabel:'#9ddfff' };
+
+const S = {scene:null, cam:null, renderer:null, labelRenderer:null, controls:null,
+           wallsG:null, floorG:null, lightsG:null, curtainsG:null, labels:[], bbox:null,
+           lightSprites:[], lightBaseOpacity:0.9};
+
+const LIGHT_DIM_OPACITY = 0.12, LIGHT_DIM_TINT = 0x5a86a0, LIGHT_ON_TINT = 0xffffff;
+
+/* ---------- Util ---------- */
+function resizeNow(){
+  const W = wrap.clientWidth, H = wrap.clientHeight;
+  S.cam.aspect = W/H; S.cam.updateProjectionMatrix();
+  S.renderer.setSize(W,H); S.labelRenderer.setSize(W,H);
+}
+window.fitNow = (pad=1.35) => { resizeNow(); fitToContent(pad); };
+
+// parent хэмжээ өөрчлөгдвөл автоматаар дахин fit
+new ResizeObserver(() => window.fitNow()).observe(wrap);
+function fitToContent(pad = 1.25){
+  // Хамгийн сүүлийн bbox-оо ашигла; байхгүй бол сценаас үүсгэнэ
+  const box = (S.bbox && !S.bbox.isEmpty())
+    ? S.bbox.clone()
+    : new THREE.Box3().setFromObject(S.wallsG || S.scene);
+
+  const size   = box.getSize(new THREE.Vector3());   // x,y,z хэмжээ
+  const center = box.getCenter(new THREE.Vector3()); // төв
+
+  // Камерын FOV ба дэлгэцийн харьцааг ашиглан зайг бодно
+  const fov    = THREE.MathUtils.degToRad(S.cam.fov);
+  const aspect = S.renderer.domElement.clientWidth /
+                 Math.max(1, S.renderer.domElement.clientHeight);
+
+  const distForHeight = (size.y / 2) / Math.tan(fov / 2);
+  const distForWidth  = (size.x / 2) / (Math.tan(fov / 2) * aspect);
+
+  // Аюулгүй зай + padding
+  const dist = pad * Math.max(distForHeight, distForWidth, size.z);
+
+  // Камерыг диагональ чиглэлд байрлуулна (гоё өнцөг)
+  const dir = new THREE.Vector3(1, 0.6, 1).normalize();
+  S.cam.position.copy(center).add(dir.multiplyScalar(dist));
+
+  // Near/Far-ийг шинэ хэмжээтэй тааруулж өг
+  S.cam.near = Math.max(0.05, dist / 1000);
+  S.cam.far  = Math.max(1000, dist * 8);
+  S.cam.updateProjectionMatrix();
+
+  // Орбитын төвийг яг боксын төв рүү
+  S.controls.target.copy(center);
+  S.controls.update();
+}
+
+
+/* === INIT унших туслах === */
+function getInit(){
+  const i = (window.INIT || {}), q = new URLSearchParams(location.search);
+  return {
+    baseUrl: i.baseUrl ?? q.get('baseUrl') ?? "",
+    siteId : i.siteId  ?? q.get('siteId')  ?? "",
+    jwt    : i.jwt     ?? q.get('jwt')     ?? ""
+  };
+}
+
+/* ✅ Flutter injection-ийн дараа дуудагдана */
+window.start = async () => {
+  try{
+    const { baseUrl, siteId, jwt } = getInit();
+
+    const loadPBD = async () => {
+      if (!baseUrl || !siteId || !jwt) {
+        return fetch('./pbd.json').then(r=>r.json());
+      }
+      const auth = /^Bearer /.test(jwt) ? jwt : `Bearer ${jwt}`;
+      loading.textContent = 'Fetching latest…';
+      const latestRes = await fetch(`${baseUrl}/api/site/${siteId}/pbd/latest`, { headers:{Authorization:auth}, cache:'no-store' });
+      if (!latestRes.ok) throw new Error('latest ' + latestRes.status);
+      const latest = await latestRes.json();
+      const url = latest.url || latest.file?.url || latest.data?.url || latest.result?.url;
+      if (!url) throw new Error('No PBD URL in latest payload');
+      const pbdUrl = /^https?:\/\//i.test(url) ? url : `${baseUrl}${url}`;
+      const pbdRes = await fetch(pbdUrl, { headers:{Authorization:auth}, cache:'no-store' });
+      if (!pbdRes.ok) throw new Error('pbd ' + pbdRes.status);
+      return pbdRes.json();
+    };
+
+    const pbd = await loadPBD();
+    flipZ(pbd);
+    init3D();
+    S.bbox = buildFromPBD(pbd);
+    hookUI();                              // бүх listener-аа эндээс нэг удаа
+    loading.remove();
+    fitToContent(1.25);
+    animate();
+
+  }catch(e){
+    loading.textContent = 'ERR: ' + (e?.message || e);
+  }
+};
+
+/* XY→XZ flip */
+function flipZ(pbd){
+  const axis = String(pbd.global?.axis || 'XY').toUpperCase();
+  if (axis !== 'XY') return;
+  (pbd.rooms||[]).forEach(r=>{ r.polygon = (r.polygon||[]).map(([x,y]) => [x, -y]); });
+  (pbd.openings||[]).forEach(o=>{ if(o.a) o.a=[o.a[0],-o.a[1]]; if(o.b) o.b=[o.b[0],-o.b[1]]; });
+  (pbd.curtains||[]).forEach(c=>{ if(c.a) c.a=[c.a[0],-c.a[1]]; if(c.b) c.b=[c.b[0],-c.b[1]]; });
+}
+
+/* ───────────── INIT 3D ───────────── */
+function init3D(){
+  const w = wrap.clientWidth, h = wrap.clientHeight;
+  S.scene = new THREE.Scene(); S.scene.background = new THREE.Color(THEME.bg); S.scene.fog = new THREE.Fog(THEME.fog, 18, 42);
+  S.cam = new THREE.PerspectiveCamera(45, w/h, 0.1, 2000); S.cam.position.set(9.2,5.0,7.3);
+  S.renderer = new THREE.WebGLRenderer({antialias:true}); S.renderer.setSize(w,h); S.renderer.setPixelRatio(Math.min(2,window.devicePixelRatio||1));
+  wrap.appendChild(S.renderer.domElement);
+
+  S.labelRenderer = new CSS2DRenderer(); S.labelRenderer.setSize(w,h);
+  S.labelRenderer.domElement.style.position='absolute'; S.labelRenderer.domElement.style.inset='0'; S.labelRenderer.domElement.style.pointerEvents='none';
+  wrap.appendChild(S.labelRenderer.domElement);
+
+  S.scene.add(new THREE.AmbientLight(0x9ddfff,0.55));
+  const dir = new THREE.DirectionalLight(0xffffff,0.55); dir.position.set(8,12,6); S.scene.add(dir);
+
+  const grid = new THREE.GridHelper(120,120,THEME.grid1,THEME.grid2); grid.material.transparent=true; grid.material.opacity=0.5; S.scene.add(grid);
+
+  S.controls = new OrbitControls(S.cam, S.renderer.domElement);
+  S.controls.enableDamping=true; S.controls.dampingFactor=0.08; S.controls.minDistance=2; S.controls.maxDistance=200;
+
+  window.addEventListener('resize', ()=>requestAnimationFrame(resizeNow));
+  window.addEventListener('orientationchange', ()=>setTimeout(()=>{ resizeNow(); fitToContent(1.3); }, 100));
+
+  // pick for light sprite clicks
+  const ray = new THREE.Raycaster(), mouse = new THREE.Vector2();
+  S.renderer.domElement.addEventListener('click',(ev)=>{
+    const r = S.renderer.domElement.getBoundingClientRect();
+    mouse.x = ((ev.clientX - r.left) / r.width)*2 - 1;
+    mouse.y = -((ev.clientY - r.top) / r.height)*2 + 1;
+    ray.setFromCamera(mouse, S.cam);
+    const hit = ray.intersectObjects(S.lightsG?.children||[], true)[0];
+    if (hit?.object?.onClick) hit.object.onClick();
+  });
+}
+
+/* ───────────── BUILD ───────────── */
+function buildFromPBD(pbd){
+  const H = pbd.global?.ceilingHeight ?? 2.8;
+  const rooms = pbd.rooms || [];
+
+  S.wallsG  = new THREE.Group(); S.floorG = new THREE.Group(); S.lightsG = new THREE.Group(); S.curtainsG = new THREE.Group();
+  S.scene.add(S.wallsG, S.floorG, S.lightsG, S.curtainsG);
+
+  const wallMat = new THREE.MeshBasicMaterial({ color:THEME.wall, transparent:true, opacity:0.22, blending:THREE.AdditiveBlending, depthWrite:false, side:THREE.DoubleSide, polygonOffset:true, polygonOffsetFactor:-2, polygonOffsetUnits:-2 });
+  const edgeMat = new THREE.LineBasicMaterial({ color:THEME.edge, transparent:true, opacity:0.9, blending:THREE.AdditiveBlending });
+
+  // segments + openings
+  const segs = dedupSegments(rooms);
+  const openings = collectOpenings(pbd, segs).map(o => normalizeOpening(o));
+
+  for (const seg of segs){
+    const parts = cutByOpenings(seg, openings);
+    for (const p of parts){
+      const dx=p.b.x-p.a.x, dz=p.b.z-p.a.z, len=Math.hypot(dx,dz); if(len<1e-4) continue;
+      const g=new THREE.PlaneGeometry(len,H), m=new THREE.Mesh(g,wallMat), ang=Math.atan2(dz,dx);
+      m.rotation.y=-ang; m.position.set((p.a.x+p.b.x)/2, H/2, (p.a.z+p.b.z)/2); m.renderOrder=1.5; S.wallsG.add(m);
+      const frame = new THREE.BufferGeometry().setFromPoints([ new THREE.Vector3(-len/2,-H/2,0), new THREE.Vector3(len/2,-H/2,0), new THREE.Vector3(len/2,H/2,0), new THREE.Vector3(-len/2,H/2,0), new THREE.Vector3(-len/2,-H/2,0) ]);
+      const line = new THREE.Line(frame, edgeMat); line.position.copy(m.position); line.rotation.copy(m.rotation); line.renderOrder=2.0; S.wallsG.add(line);
+    }
+    drawOpeningsOnSegment(seg, openings, H, edgeMat);
+  }
+
+  // floor outlines
+  for (const r of rooms){
+    const pts=(r.polygon||[]).map(([x,z])=>new THREE.Vector3(x,0.01,z)); if(pts.length<2) continue;
+    const pos=[]; for(let i=0;i<pts.length;i++){const p1=pts[i],p2=pts[(i+1)%pts.length]; pos.push(p1.x,p1.y,p1.z,p2.x,p2.y,p2.z);}
+    const gg=new THREE.BufferGeometry(); gg.setAttribute('position', new THREE.Float32BufferAttribute(pos,3));
+    const ln=new THREE.LineSegments(gg, edgeMat); ln.renderOrder=2.1; S.floorG.add(ln);
+  }
+
+  // labels
+  addRoomLabels(rooms);
+
+  // lights
+  placeRoomLights(rooms, { y: H*0.8, size: 0.55 });
+
+  // curtains
+  if (Array.isArray(pbd.curtains) && pbd.curtains.length) drawCurtains(pbd.curtains, H, edgeMat);
+
+  // center & bbox
+  const bbox = new THREE.Box3().setFromObject(S.wallsG.children.length ? S.wallsG : S.scene);
+const c = bbox.getCenter(new THREE.Vector3());
+['wallsG','floorG','lightsG','curtainsG'].forEach(k => {
+  S[k].position.x -= c.x; S[k].position.z -= c.z;
+});
+S.labels.forEach(o => { o.position.x -= c.x; o.position.z -= c.z; });
+
+// ⬇️  ЭНЭ МӨР НЭМБЭЛ ТОХИРОМЖТОЙ
+S.bbox = new THREE.Box3().setFromObject(S.wallsG);
+
+return S.bbox;
+}
+
+function scheduleFit(){
+  // шууд
+  requestAnimationFrame(()=>{ resizeNow(); fitToContent(1.35); });
+  // address bar шилжилт
+  setTimeout(()=>{ resizeNow(); fitToContent(1.35); }, 120);
+  setTimeout(()=>{ resizeNow(); fitToContent(1.35); }, 360);
+}
+
+// FS орох товч дээр
+btnFS.onclick = async ()=>{
+  await enterNativeFS(wrap);
+  wrap.classList.add('fs');
+  btnFS.style.display = 'none';
+  btnExitFS.style.display = '';
+  scheduleFit();
+};
+
+// fullscreenchange үед (системийн FS)
+document.addEventListener('fullscreenchange', ()=>{
+  const active = !!document.fullscreenElement;
+  if (active) scheduleFit();
+  else { wrap.classList.remove('fs'); btnExitFS.style.display='none'; btnFS.style.display=''; requestAnimationFrame(resizeNow); }
+});
+
+/* Segments */
+function dedupSegments(rooms){
+  const map=new Map(), put=(a,b)=>{
+    const p1=`${a.x.toFixed(3)},${a.z.toFixed(3)}`, p2=`${b.x.toFixed(3)},${b.z.toFixed(3)}`, k=p1<p2?`${p1}|${p2}`:`${p2}|${p1}`;
+    if(!map.has(k)){ const dx=b.x-a.x,dz=b.z-a.z,len=Math.hypot(dx,dz)||1e-6,dir={x:dx/len,z:dz/len}; map.set(k,{a,b,len,dir}); }
+  };
+  for(const r of rooms){ const P=(r.polygon||[]).map(([x,z])=>({x,z})); for(let i=0;i<P.length;i++) put(P[i],P[(i+1)%P.length]); }
+  return [...map.values()];
+}
+
+/* Labels */
+function addRoomLabels(rooms){
+  for(const r of rooms){
+    if(!r.name || !r.polygon?.length) continue;
+    let cx=0, cz=0; r.polygon.forEach(([x,z])=>{cx+=x; cz+=z;}); cx/=r.polygon.length; cz/=r.polygon.length;
+    const div=document.createElement('div'); div.textContent=r.name; div.style.color=THEME.roomLabel;
+    div.style.font='700 13px/1.1 system-ui'; div.style.letterSpacing='0.3px'; div.style.textShadow='0 0 8px rgba(102,217,255,.65)';
+    const obj=new CSS2DObject(div); obj.position.set(cx,2.0,cz); obj.userData={followGroup:true};
+    S.labels.push(obj); S.scene.add(obj);
+  }
+}
+function setLabelsVisible(v){ S.labels.forEach(o=>o.visible=v); }
+
+/* Openings helpers */
+const EPS = 1e-3;
+function normalizeOpening(o){ const v=p=>({x:+p[0],z:+p[1]}); const a=v(o.a), b=v(o.b); const dx=b.x-a.x,dz=b.z-a.z; const len=Math.hypot(dx,dz)||EPS; const dir={x:dx/len,z:dz/len}; return {...o,a,b,len,dir}; }
+function cutByOpenings(seg, openings){
+  const spans=[[0,seg.len]];
+  for(const o of openings){ if(!sameSegment(seg,o)) continue; const s=clamp(o.offset??0,0,seg.len); const e=clamp((o.offset??0)+(o.width??0),0,seg.len); splitSpan(spans,s,e); }
+  return spans.filter(([s,e])=>e-s>EPS).map(([s,e])=>({ a:{x:seg.a.x+seg.dir.x*s, z:seg.a.z+seg.dir.z*s}, b:{x:seg.a.x+seg.dir.x*e, z:seg.a.z+seg.dir.z*e} }));
+}
+function splitSpan(spans,s,e){ for(let i=spans.length-1;i>=0;i--){const [a,b]=spans[i]; if(e<=a||s>=b) continue; spans.splice(i,1); if(s-a>EPS) spans.push([a,s]); if(b-e>EPS) spans.push([e,b]);}}
+function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+function sameSegment(s,o){ const d=(p,q)=>Math.hypot(p.x-q.x,p.z-q.z); return (d(s.a,o.a)<1e-3&&d(s.b,o.b)<1e-3)||(d(s.a,o.b)<1e-3&&d(s.b,o.a)<1e-3); }
+
+function rectFrame(w,h){ const pts=[new THREE.Vector3(-w/2,-h/2,0), new THREE.Vector3(w/2,-h/2,0), new THREE.Vector3(w/2,h/2,0), new THREE.Vector3(-w/2,h/2,0), new THREE.Vector3(-w/2,-h/2,0)]; return new THREE.BufferGeometry().setFromPoints(pts); }
+
+function drawOpeningsOnSegment(seg, openings, H, edgeMat){
+  for(const o of openings){
+    if(!sameSegment(seg,o) || !o.width || o.width<0.05) continue;
+    const mid=(o.offset??0)+(o.width??0)/2;
+    const cx=seg.a.x+seg.dir.x*mid, cz=seg.a.z+seg.dir.z*mid, ang=Math.atan2(seg.dir.z,seg.dir.x);
+    if(o.type==='door'){
+      const dh=o.height??2.05, g=rectFrame(o.width,dh), line=new THREE.Line(g,edgeMat);
+      line.position.set(cx,dh/2,cz); line.rotation.y=-ang; line.renderOrder=2.2; S.wallsG.add(line); drawDoorSwing(cx,cz,ang,o,edgeMat);
+    }
+    if(o.type==='window'){
+      const sill=o.sill??0.9, wh=Math.max(0.2,o.height??1.2), g=rectFrame(o.width,wh), frame=new THREE.Line(g,edgeMat);
+      frame.position.set(cx,sill+wh/2,cz); frame.rotation.y=-ang; frame.renderOrder=2.2; S.wallsG.add(frame);
+      const glass=new THREE.Mesh(new THREE.PlaneGeometry(o.width,wh), new THREE.MeshBasicMaterial({color:0x8EE7FF,transparent:true,opacity:0.10,blending:THREE.AdditiveBlending,depthWrite:false}));
+      glass.position.set(cx,sill+wh/2,cz); glass.rotation.y=-ang; glass.renderOrder=2.15; S.wallsG.add(glass);
+      if(o.curtain) addCurtain(cx,sill,wh,cz,ang,o.width);
+    }
+  }
+}
+function drawDoorSwing(cx,cz,ang,o,edgeMat){
+  const r=(o.width??0.9), sweep=(o.swing??90)*Math.PI/180, steps=18, pts=[];
+  for(let i=0;i<=steps;i++){ const t=sweep*i/steps; pts.push(new THREE.Vector3(Math.cos(t)*r/2,0,Math.sin(t)*r/2)); }
+  const g=new THREE.BufferGeometry().setFromPoints(pts), line=new THREE.Line(g,edgeMat);
+  const hingeSign=(o.hinge==='right')?1:-1, nx=Math.cos(ang+Math.PI/2)*hingeSign, nz=Math.sin(ang+Math.PI/2)*hingeSign;
+  line.position.set(cx+nx*(r/2),0.02,cz+nz*(r/2)); line.rotation.y=-ang; line.renderOrder=2.25; S.wallsG.add(line);
+}
+
+/* Curtains */
+function addCurtain(cx,sill,h,cz,ang,w){
+  const mesh=new THREE.Mesh(new THREE.PlaneGeometry(w,h), new THREE.MeshBasicMaterial({color:0xB3ECFF,transparent:true,opacity:0.18,blending:THREE.AdditiveBlending,depthWrite:false}));
+  mesh.position.set(cx,sill+h/2,cz+0.04); mesh.rotation.y=-ang; mesh.renderOrder=2.12; S.wallsG.add(mesh); S.curtainsG.add(mesh);
+}
+function drawCurtains(list,H,edgeMat){ /* (хоёрдогч – таньд ашигтай бол үлдээв, богиносгов) */ list.forEach(c=>{ if(!(c?.a&&c?.b))return; const a=new THREE.Vector3(c.a[0],0,c.a[1]), b=new THREE.Vector3(c.b[0],0,c.b[1]); const len=a.distanceTo(b); if(len<1e-4)return; const ang=Math.atan2(b.z-a.z,b.x-a.x), mid=a.clone().add(b).multiplyScalar(0.5), sill=c.sill??0.9, height=c.height??1.6, offset=c.offset??0.04; const mat=new THREE.MeshStandardMaterial({color:new THREE.Color(c.color??0x8B5A2B),transparent:true,opacity:c.opacity??0.28,roughness:0.95,metalness:0.02,side:THREE.DoubleSide}); const geo=new THREE.PlaneGeometry(len,height,80,1); const pos=geo.attributes.position, amp=c.waveAmp??0.03, freq=c.waveFreq??10; for(let i=0;i<pos.count;i++){const x=pos.getX(i),y=pos.getY(i); const u=(x+len/2)/len, v=(y+height/2)/height; const aS=0.25+0.75*v; pos.setZ(i, Math.sin(u*Math.PI*freq)*amp*aS);} pos.needsUpdate=true; geo.computeVertexNormals(); const cloth=new THREE.Mesh(geo,mat); const ny=new THREE.Vector3(Math.sin(ang),0,-Math.cos(ang)); cloth.position.copy(mid); cloth.position.y=sill+height/2; cloth.position.add(ny.clone().multiplyScalar(offset)); cloth.rotation.y=-ang; cloth.renderOrder=2.15; S.curtainsG.add(cloth); }); }
+
+/* Openings collector (өрөөн дотор тэмдэглэсэн тохиолдолд) */
+function collectOpenings(pbd,segs){
+  if (Array.isArray(pbd.openings) && pbd.openings.length && pbd.openings[0].a) return pbd.openings.slice();
+  const out=[], avgSegLen=segs.length?segs.reduce((s,x)=>s+x.len,0)/segs.length:1.0, MAX_WALL_DIST=Math.max(0.60, Math.min(2.0, avgSegLen*0.25)), defaultH={door:2.05, window:1.20}, defaultSill=0.90;
+  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+  function projectToSeg(center, seg){ const ax=seg.a.x, az=seg.a.z, dx=seg.dir.x, dz=seg.dir.z; const tRaw=(center.x-ax)*dx+(center.z-az)*dz, t=clamp(tRaw,0,seg.len); const px=ax+dx*t, pz=az+dz*t; const dist=Math.hypot(center.x-px, center.z-pz); return {t, dist}; }
+  for(const r of (pbd.rooms||[])){
+    for(const o0 of (r.openings||[])){
+      const kind=(String(o0.kind||o0.type||'door').toLowerCase()==='window')?'window':'door';
+      const width=Math.max(0.1, parseFloat(o0.width)||0.9);
+      const center={x:(+o0.x||0), z:-(+o0.y||0)};
+      let best=null; for(const s of segs){ const pr=projectToSeg(center,s); if(!best || pr.dist<best.dist) best={seg:s, ...pr}; }
+      if(!best || best.dist>MAX_WALL_DIST) continue;
+      let offset=best.t - width/2; offset = clamp(offset, 0, best.seg.len - width);
+      const item={ type:kind, a:[best.seg.a.x,best.seg.a.z], b:[best.seg.b.x,best.seg.b.z], offset:+offset.toFixed(3), width:+width.toFixed(3) };
+      if(kind==='door'){ item.height=parseFloat(o0.height)||defaultH.door; const f=(o0.facing!=null)?+o0.facing:0; item.hinge=(f>=180)?'right':'left'; item.swing=90; }
+      else { item.height=parseFloat(o0.height)||defaultH.window; item.sill=(o0.sill!=null)?parseFloat(o0.sill):defaultSill; item.curtain=!!o0.curtain; }
+      out.push(item);
+    }
+  }
+  return out;
+}
+
+/* Lights */
+function updateLightVisual(li){
+  const intensity = li.on ? (li.value/100) : 0;
+  const op = li.on ? S.lightBaseOpacity*(0.25+0.75*intensity) : LIGHT_DIM_OPACITY;
+  li.sprite.material.opacity = op;
+  li.sprite.material.color.setHex(li.on ? LIGHT_ON_TINT : LIGHT_DIM_TINT);
+  const s0=li.baseSize, s=THREE.MathUtils.lerp(s0*0.85, s0*1.25, intensity);
+  li.sprite.scale.set(s,s,s);
+}
+function placeRoomLights(rooms, { y=2.0, size=0.5 } = {}){
+  const svg = encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'>
+    <defs><radialGradient id='g' cx='0.5' cy='0.5' r='0.5'><stop offset='0' stop-color='#FFFFFF'/><stop offset='1' stop-color='#59D6FF' stop-opacity='0'/></radialGradient></defs>
+    <circle cx='32' cy='32' r='10' fill='#E8FAFF'/><circle cx='32' cy='32' r='22' fill='url(#g)'/>
+    <g stroke='#B3ECFF' stroke-width='3' stroke-linecap='round' opacity='0.95'>
+      <line x1='32' y1='4'  x2='32' y2='14'/><line x1='32' y1='50' x2='32' y2='60'/>
+      <line x1='4'  y1='32' x2='14' y2='32'/><line x1='50' y1='32' x2='60' y2='32'/>
+      <line x1='10' y1='10' x2='18' y2='18'/><line x1='46' y1='46' x2='54' y2='54'/>
+      <line x1='10' y1='54' x2='18' y2='46'/><line x1='46' y1='18' x2='54' y2='10'/>
+    </g></svg>`);
+  const tex = new THREE.TextureLoader().load(`data:image/svg+xml;utf8,${svg}`);
+  S.lightSprites.length=0;
+
+  let idx=0;
+  for(const r of rooms){
+    if(!r.polygon?.length) continue;
+    let cx=0,cz=0; for(const [x,z] of r.polygon){ cx+=x; cz+=z; } cx/=r.polygon.length; cz/=r.polygon.length;
+
+    const mat = new THREE.SpriteMaterial({ map:tex, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, opacity:S.lightBaseOpacity*0.6 });
+    const sp = new THREE.Sprite(mat); sp.position.set(cx,y,cz); sp.scale.set(size,size,size); sp.renderOrder=3; S.lightsG.add(sp);
+
+    const li = { id:`L${++idx}`, room:r.name||'Room', sprite:sp, baseSize:size, value:60, on:true };
+    S.lightSprites.push(li);
+    sp.onClick = ()=>{ li.on=!li.on; updateLightVisual(li); const row=document.querySelector(`[data-light="${li.id}"] input[type="checkbox"]`); if(row) row.checked=li.on; };
+    updateLightVisual(li);
+  }
+  buildLightsPanel();
+}
+function buildLightsPanel(){
+  const list=document.getElementById('lightsList'); if(!list) return;
+  list.innerHTML='';
+  for(const L of S.lightSprites){
+    if (typeof L.value!=='number') L.value=60; if (typeof L.on!=='boolean') L.on=true; updateLightVisual(L);
+    const row=document.createElement('div'); row.className='light-row'; row.dataset.light=L.id;
+    row.innerHTML = `
+      <label><input type="checkbox" ${L.on?'checked':''} aria-label="toggle ${L.room}"></label>
+      <span class="light-name" title="${L.room||''}">${L.room||'Light'}</span>
+      <input class="light-range" type="range" min="0" max="100" value="${L.value}" aria-label="${L.room||'Light'} level">
+      <span class="light-pct">${L.value}%</span>`;
+    const chk=row.querySelector('input[type="checkbox"]'), range=row.querySelector('.light-range'), pct=row.querySelector('.light-pct');
+    chk.addEventListener('change',e=>{ L.on=!!e.target.checked; updateLightVisual(L); });
+    const apply=()=>{ L.value=range.value|0; pct.textContent=`${L.value}%`; updateLightVisual(L); };
+    range.addEventListener('input',apply,{passive:true}); range.addEventListener('change',apply);
+    row.addEventListener('pointerenter',()=>row.classList.add('hover')); row.addEventListener('pointerleave',()=>row.classList.remove('hover'));
+    list.appendChild(row);
+  }
+}
+
+/* ───────────── Camera & Loop ───────────── */
+function animate(){ requestAnimationFrame(animate); S.controls.update(); S.renderer.render(S.scene,S.cam); S.labelRenderer.render(S.scene,S.cam); }
+
+/* ───────────── UI hooks ───────────── */
+function hookUI(){
+  // Visibility toggles
+  document.getElementById('chkFloor').onchange   = e => S.floorG.visible   = e.target.checked;
+  document.getElementById('chkWalls').onchange   = e => S.wallsG.visible   = e.target.checked;
+  document.getElementById('chkLights').onchange  = e => { S.lightsG.visible = e.target.checked; const dis=!e.target.checked; document.querySelectorAll('#lightsList input').forEach(el=>el.disabled=dis); };
+  const chkCurt=document.getElementById('chkCurtains'); const hasCurt=S.curtainsG.children.length>0;
+  chkCurt.checked=hasCurt; chkCurt.disabled=!hasCurt; chkCurt.onchange = e => S.curtainsG.visible = e.target.checked;
+  document.getElementById('chkLabels').onchange  = e => setLabelsVisible(e.target.checked);
+
+  // Lights panel
+  const panel = document.getElementById('lightsPanel');
+  document.getElementById('btnLightsCfg').onclick = ()=> panel.style.display = (panel.style.display==='block')?'none':'block';
+  document.getElementById('btnCloseLights').onclick = ()=> panel.style.display='none';
+
+  // Fit
+  document.getElementById('btnFit').onclick = ()=>fitToContent(1.25);
+
+  // Fullscreen
+  const btnFS=document.getElementById('btnFS'), btnExit=document.getElementById('btnExitFS');
+  const enterNativeFS=el=> (el.requestFullscreen||el.webkitRequestFullscreen||el.msRequestFullscreen)?.call(el).catch(()=>{});
+  const exitNativeFS =()=> (document.exitFullscreen||document.webkitExitFullscreen||document.msExitFullscreen)?.call(document).catch(()=>{});
+  btnFS.onclick = async ()=>{ await enterNativeFS(wrap); wrap.classList.add('fs'); btnFS.style.display='none'; btnExit.style.display=''; requestAnimationFrame(()=>{ resizeNow(); fitToContent(1.35); }); };
+  btnExit.onclick = async ()=>{ await exitNativeFS(); wrap.classList.remove('fs'); btnExit.style.display='none'; btnFS.style.display=''; requestAnimationFrame(resizeNow); };
+  ['fullscreenchange','webkitfullscreenchange','MSFullscreenChange'].forEach(ev=>{
+    document.addEventListener(ev, ()=>{ const active=!!(document.fullscreenElement||document.webkitFullscreenElement); if(!active && wrap.classList.contains('fs')){ wrap.classList.remove('fs'); btnExit.style.display='none'; btnFS.style.display=''; requestAnimationFrame(resizeNow); }});
+  });
+}
+</script>
+</body>
+</html>
