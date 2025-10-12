@@ -1,6 +1,5 @@
 // lib/app/routes.dart
 import 'package:get/get.dart';
-import 'package:flutter/material.dart';
 
 import 'modules/auth/login_screen.dart';
 import 'modules/auth/auth_controller.dart';

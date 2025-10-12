@@ -21,8 +21,8 @@ class AppScaffold extends StatelessWidget {
   Widget build(BuildContext context) {
       return Scaffold(
       appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.menu),           // <<< жинхэнэ menu icon
+        leading: const IconButton(
+          icon: Icon(Icons.menu),           // <<< жинхэнэ menu icon
           onPressed: RootScaffold.openDrawer,     // <<< root Drawer-н нээх
         ),
         title: Text(title),

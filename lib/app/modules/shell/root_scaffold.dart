@@ -6,8 +6,8 @@ class RootScaffold extends InheritedWidget {
   const RootScaffold({
     super.key,
     required this.scaffoldKey,
-    required Widget child,
-  }) : super(child: child);
+    required super.child,
+  });
 
   static ScaffoldState? stateOf(BuildContext context) {
     final holder = context.dependOnInheritedWidgetOfExactType<RootScaffold>();

@@ -251,7 +251,6 @@ class _DashboardHeader extends StatelessWidget {
   final int rainProb;  // %
 
   const _DashboardHeader({
-    super.key,
     required this.outsideTemp,
     required this.humidity,
     required this.weatherTemp,
@@ -261,7 +260,7 @@ class _DashboardHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final bg = cs.surfaceVariant.withOpacity(0.15);
+    final bg = cs.surfaceContainerHighest.withOpacity(0.15);
 
     return Column(
       children: [
@@ -342,7 +341,7 @@ class _KpiCard extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color: background ?? cs.surfaceVariant.withOpacity(0.12),
+        color: background ?? cs.surfaceContainerHighest.withOpacity(0.12),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: cs.outlineVariant.withOpacity(.25), width: 1),
       ),
@@ -401,7 +400,7 @@ class _InlineItem {
 
 class _InlineInfoCard extends StatelessWidget {
   final List<_InlineItem> items;
-  const _InlineInfoCard({super.key, required this.items});
+  const _InlineInfoCard({required this.items});
 
   @override
   Widget build(BuildContext context) {

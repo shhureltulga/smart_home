@@ -19,10 +19,15 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    _me = _api.get('/me', withAuth: true).catchError((_) => <String, dynamic>{
-          'user': {'displayName': 'Хэрэглэгч'},
-          'households': []
-        });
+
+    _me = _api
+        .get('/me', withAuth: true)
+        .then((res) => res.data as Map<String, dynamic>)
+        // 2 параметртэй хэлбэр байж болно: (error, stack)
+        .catchError((_, __) => <String, dynamic>{
+              'user': {'displayName': 'Хэрэглэгч'},
+              'households': <dynamic>[],
+            });
   }
 
   @override
@@ -135,11 +140,11 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ),
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+        const SliverPadding(
+          padding: EdgeInsets.fromLTRB(16, 0, 16, 24),
           sliver: SliverToBoxAdapter(
             child: Row(
-              children: const [
+              children: [
                 Expanded(child: _NewsThumb(title: 'Талбайн шинэчлэл')),
                 SizedBox(width: 12),
                 Expanded(child: _NewsThumb(title: 'Дэд бүтцийн засвар')),
@@ -159,8 +164,8 @@ class _HomeScreenState extends State<HomeScreen> {
 class _TopMetrics extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: const [
+    return const Row(
+      children: [
         Expanded(
           child: _MetricCard(
             title: 'Гадна температур',
@@ -186,7 +191,7 @@ class _MetricCard extends StatelessWidget {
   final String value;
   final IconData icon;
   const _MetricCard(
-      {required this.title, required this.value, required this.icon, super.key});
+      {required this.title, required this.value, required this.icon});
 
   @override
   Widget build(BuildContext context) {
@@ -225,9 +230,9 @@ class _WeatherRow extends StatelessWidget {
     return Container(
       decoration: _cardBox,
       padding: const EdgeInsets.all(14),
-      child: Row(
+      child: const Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: const [
+        children: [
           _WeatherItem(icon: Icons.cloud_queue, label: 'Цаг агаар', value: '23°C'),
           _WeatherItem(
               icon: Icons.air_rounded, label: 'Салхины хурд', value: '9м/с'),
@@ -244,7 +249,7 @@ class _WeatherItem extends StatelessWidget {
   final String label;
   final String value;
   const _WeatherItem(
-      {required this.icon, required this.label, required this.value, super.key});
+      {required this.icon, required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {
@@ -268,7 +273,7 @@ class _WeatherItem extends StatelessWidget {
 class _SectionHeader extends StatelessWidget {
   final String title;
   final VoidCallback onSeeAll;
-  const _SectionHeader({required this.title, required this.onSeeAll, super.key});
+  const _SectionHeader({required this.title, required this.onSeeAll});
 
   @override
   Widget build(BuildContext context) {
@@ -279,8 +284,8 @@ class _SectionHeader extends StatelessWidget {
         const Spacer(),
         GestureDetector(
           onTap: onSeeAll,
-          child: Row(
-            children: const [
+          child: const Row(
+            children: [
               Text('Бүгд', style: TextStyle(color: Colors.orange)),
               SizedBox(width: 4),
               Icon(Icons.north_east, size: 16, color: Colors.orange),
@@ -294,7 +299,7 @@ class _SectionHeader extends StatelessWidget {
 
 class _CameraCard extends StatelessWidget {
   final _CamItem item;
-  const _CameraCard({required this.item, super.key});
+  const _CameraCard({required this.item});
 
   @override
   Widget build(BuildContext context) {
@@ -372,7 +377,7 @@ class _CameraCard extends StatelessWidget {
 
 class _Chip extends StatelessWidget {
   final String text;
-  const _Chip({required this.text, super.key});
+  const _Chip({required this.text});
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -388,7 +393,7 @@ class _Chip extends StatelessWidget {
 
 class _NewsThumb extends StatelessWidget {
   final String title;
-  const _NewsThumb({required this.title, super.key});
+  const _NewsThumb({required this.title});
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -476,7 +481,7 @@ final _cameraItems = <_CamItem>[
 /// ХАЖУУ ЦЭС (Drawer)
 /// --------------------------
 class _SideDrawer extends StatelessWidget {
-  const _SideDrawer({super.key});
+  const _SideDrawer();
 
   @override
   Widget build(BuildContext context) {

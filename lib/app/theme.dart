@@ -36,13 +36,13 @@ class AppTokens extends ThemeExtension<AppTokens> {
   @override
   AppTokens lerp(ThemeExtension<AppTokens>? other, double t) {
     if (other is! AppTokens) return this;
-    Color _l(Color a, Color b) => Color.lerp(a, b, t)!;
+    Color l(Color a, Color b) => Color.lerp(a, b, t)!;
     return AppTokens(
-      accent: _l(accent, other.accent),
-      success: _l(success, other.success),
-      warning: _l(warning, other.warning),
-      surfaceCard: _l(surfaceCard, other.surfaceCard),
-      surfaceElev: _l(surfaceElev, other.surfaceElev),
+      accent: l(accent, other.accent),
+      success: l(success, other.success),
+      warning: l(warning, other.warning),
+      surfaceCard: l(surfaceCard, other.surfaceCard),
+      surfaceElev: l(surfaceElev, other.surfaceElev),
     );
   }
 }
@@ -95,8 +95,8 @@ class AppTheme {
 
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
         type: BottomNavigationBarType.fixed,
-          selectedIconTheme: const IconThemeData(size: 24),
-        unselectedIconTheme: const IconThemeData(size: 22),
+          selectedIconTheme: IconThemeData(size: 24),
+        unselectedIconTheme: IconThemeData(size: 22),
         selectedLabelStyle: TextStyle(fontWeight: FontWeight.w600),
         showUnselectedLabels: true,
       ),

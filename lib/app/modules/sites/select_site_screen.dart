@@ -2,7 +2,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
-import 'package:smart_home/app/data/models/site.dart';
 import 'package:smart_home/app/modules/sites/sites_controller.dart';
 
 import 'package:smart_home/app/widgets/app_scaffold.dart';
