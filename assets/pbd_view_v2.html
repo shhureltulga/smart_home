@@ -26,7 +26,7 @@
     #wrap::after{content:"";position:absolute;inset:0;pointer-events:none;
       background:radial-gradient(1200px 600px at 70% -20%, #1a4b62aa, transparent 60%),
                  radial-gradient(900px 500px at 10% 110%, #0e2a38aa, transparent 55%);
-      mix-blend-mode:screen;opacity:.35}
+      mix-blend-mode:screen;opacity:.60}
 
     /* FS/Exit товч */
     #btnFS,#btnExitFS{margin-left:8px;padding:2px 8px;border:0;border-radius:6px;background:#123;color:#b8d9e9}
@@ -40,6 +40,18 @@
     .light-row.hover{background:#0f1f2b}
     .light-name{width:80px;opacity:.9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .light-range{flex:1}
+
+    /* compact үед жижиг чекүүдийг нуух */
+      #wrap.compact #ui .hidable-sm { display:none; }
+
+      /* UI мөр хэт урт бол overflow bit сайхан таслах */
+      #ui{ display:flex; align-items:center; flex-wrap:wrap; gap:6px; }
+      #ui > *{ white-space:nowrap; }
+
+
+    #devicesPanel .tab{all:unset;cursor:pointer;padding:6px 10px;border-radius:8px;background:#10202b}
+    #devicesPanel .tab.on{background:#153246}
+
   </style>
 
   <script type="importmap">{
@@ -57,14 +69,18 @@
 
   <!-- UI-г wrap ДОТОР нь байрлуулсан -->
   <div id="ui">
-    <button id="btnFit">Fit</button>
-    <label><input id="chkFloor"  type="checkbox" checked> Floor</label>
-    <label><input id="chkWalls"  type="checkbox" checked> Walls</label>
-    <label><input id="chkLights" type="checkbox" checked> Lights</label>
-    <label><input id="chkCurtains" type="checkbox" checked> Curtains</label>
-    <label><input id="chkLabels" type="checkbox" checked> Labels</label>
+     <button id="btnFit">Fit</button>
+  <label><input id="chkFloor"  type="checkbox" checked> Floor</label>
+  <label><input id="chkWalls"  type="checkbox" checked> Walls</label>
 
-    <button id="btnLightsCfg" style="margin-left:8px;">⚡ Lights…</button>
+  <!-- Хэрвээ чекээр нь харуулах шаардлагагүй бол энэ ч бас hidable-sm байж болно -->
+  <label class="hidable-sm"><input id="chkLights" type="checkbox" checked> Lights</label>
+
+  <!-- ЭНД НУУХ -->
+  <label class="hidable-sm"><input id="chkCurtains" type="checkbox" checked> Curtains</label>
+  <label class="hidable-sm"><input id="chkLabels" hidden="true"  type="checkbox" checked> Labels</label>
+
+  <button id="btnLightsCfg" hidden="true" style="margin-left:8px;">⚡ Lights…</button>
     <button id="btnFS"    hidden="true"  title="Fullscreen">⤢</button>
     <button id="btnExitFS" hidden="true" title="Exit" style="display:none">⤡</button>
 
@@ -75,6 +91,23 @@
       </div>
       <div id="lightsList"></div>
     </div>
+    <label><input id="chkSockets" type="checkbox" checked> Sockets</label>
+<label><input id="chkHeaters" type="checkbox" checked> Heaters</label>
+<button id="btnDevices" style="margin-left:8px;">⚡ Devices…</button>
+
+<div id="devicesPanel" style="
+  position:absolute;right:10px;top:54px;z-index:11;display:none;
+  background:#0b1520cc;border-radius:12px;padding:10px;width:280px;font:13px system-ui;">
+  <div style="display:flex;gap:6px;margin-bottom:8px">
+    <button data-tab="lights"  class="tab on">Lights</button>
+    <button data-tab="sockets" class="tab">Sockets</button>
+    <button data-tab="heaters" class="tab">Heaters</button>
+    <div style="flex:1"></div>
+    <button id="btnCloseDevices" style="all:unset;cursor:pointer;padding:4px 6px;background:#12202b;border-radius:6px">×</button>
+  </div>
+  <div id="devList" style="max-height:260px;overflow:auto"></div>
+</div>
+
   </div>
 </div>
 
@@ -86,7 +119,7 @@ import { CSS2DRenderer, CSS2DObject } from "three/examples/jsm/renderers/CSS2DRe
 const wrap = document.getElementById('wrap');
 const loading = document.getElementById('loading');
 
-const THEME = { bg:'#071018', fog:'#071018', grid1:0x123241, grid2:0x0b2330, wall:0x59D6FF, edge:0xB3ECFF, roomLabel:'#9ddfff' };
+const THEME = { bg:'#0A1520', fog:'#0A1520', grid1:0x123241, grid2:0x0b2330, wall:0x59D6FF, edge:0xB3ECFF, roomLabel:'#9ddfff' };
 
 const S = {scene:null, cam:null, renderer:null, labelRenderer:null, controls:null,
            wallsG:null, floorG:null, lightsG:null, curtainsG:null, labels:[], bbox:null,
@@ -99,6 +132,7 @@ function resizeNow(){
   const W = wrap.clientWidth, H = wrap.clientHeight;
   S.cam.aspect = W/H; S.cam.updateProjectionMatrix();
   S.renderer.setSize(W,H); S.labelRenderer.setSize(W,H);
+   updateCompactUI(); 
 }
 window.fitNow = (pad=1.35) => { resizeNow(); fitToContent(pad); };
 
@@ -174,6 +208,7 @@ window.start = async () => {
     const pbd = await loadPBD();
     flipZ(pbd);
     init3D();
+    updateCompactUI(); 
     S.bbox = buildFromPBD(pbd);
     hookUI();                              // бүх listener-аа эндээс нэг удаа
     loading.remove();
@@ -227,6 +262,17 @@ function init3D(){
     const hit = ray.intersectObjects(S.lightsG?.children||[], true)[0];
     if (hit?.object?.onClick) hit.object.onClick();
   });
+
+  S.devicesG = { root:new THREE.Group(), sockets:new THREE.Group(), heaters:new THREE.Group() };
+  S.devicesG.root.add(S.devicesG.sockets, S.devicesG.heaters);
+  S.scene.add(S.devicesG.root);
+}
+  function updateCompactUI(){
+  // карт маягийн жижиг талбай гэж бодсон босго (хүсвэл өөрчилж болно)
+  const w = wrap.clientWidth;
+  const h = wrap.clientHeight;
+  const isCompact = (w < 360) || (h < 260);   // жишээ босго
+  wrap.classList.toggle('compact', isCompact);
 }
 
 /* ───────────── BUILD ───────────── */
@@ -281,6 +327,8 @@ const c = bbox.getCenter(new THREE.Vector3());
 });
 S.labels.forEach(o => { o.position.x -= c.x; o.position.z -= c.z; });
 
+placeDevices(pbd, { y: H*0.8 });
+
 // ⬇️  ЭНЭ МӨР НЭМБЭЛ ТОХИРОМЖТОЙ
 S.bbox = new THREE.Box3().setFromObject(S.wallsG);
 
@@ -289,7 +337,7 @@ return S.bbox;
 
 function scheduleFit(){
   // шууд
-  requestAnimationFrame(()=>{ resizeNow(); fitToContent(1.35); });
+  requestAnimationFrame(()=>{updateCompactUI(); resizeNow(); fitToContent(1.35); });
   // address bar шилжилт
   setTimeout(()=>{ resizeNow(); fitToContent(1.35); }, 120);
   setTimeout(()=>{ resizeNow(); fitToContent(1.35); }, 360);
@@ -492,6 +540,186 @@ function hookUI(){
     document.addEventListener(ev, ()=>{ const active=!!(document.fullscreenElement||document.webkitFullscreenElement); if(!active && wrap.classList.contains('fs')){ wrap.classList.remove('fs'); btnExit.style.display='none'; btnFS.style.display=''; requestAnimationFrame(resizeNow); }});
   });
 }
+
+document.getElementById('btnDevices').onclick = ()=>{
+  const p = document.getElementById('devicesPanel');
+  p.style.display = (p.style.display==='none' || !p.style.display) ? 'block' : 'none';
+};
+document.getElementById('btnCloseDevices').onclick = ()=>{
+  document.getElementById('devicesPanel').style.display='none';
+};
+document.getElementById('chkSockets').onchange = e => S.devicesG.sockets.visible = e.target.checked;
+document.getElementById('chkHeaters').onchange = e => S.devicesG.heaters.visible = e.target.checked;
+
+// таб солих
+document.querySelectorAll('#devicesPanel .tab').forEach(btn=>{
+  btn.onclick = ()=>{ document.querySelectorAll('#devicesPanel .tab').forEach(b=>b.classList.remove('on'));
+    btn.classList.add('on'); buildDevicesPanel(btn.dataset.tab); };
+});
+
+function texFromSVG(svg){
+  return new THREE.TextureLoader().load(`data:image/svg+xml;utf8,${encodeURIComponent(svg)}`);
+}
+
+const TEX = {
+  light:  texFromSVG(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'>
+    <defs><radialGradient id='g' cx='0.5' cy='0.5' r='0.5'>
+      <stop offset='0' stop-color='#fff'/><stop offset='1' stop-color='#59D6FF' stop-opacity='0'/></radialGradient></defs>
+    <circle cx='32' cy='32' r='10' fill='#E8FAFF'/><circle cx='32' cy='32' r='22' fill='url(#g)'/>
+    <g stroke='#B3ECFF' stroke-width='3' stroke-linecap='round' opacity='0.95'>
+      <line x1='32' y1='4' x2='32' y2='14'/><line x1='32' y1='50' x2='32' y2='60'/>
+      <line x1='4' y1='32' x2='14' y2='32'/><line x1='50' y1='32' x2='60' y2='32'/>
+      <line x1='10' y1='10' x2='18' y2='18'/><line x1='46' y1='46' x2='54' y2='54'/>
+      <line x1='10' y1='54' x2='18' y2='46'/><line x1='46' y1='18' x2='54' y2='10'/>
+    </g></svg>`),
+
+  socket: texFromSVG(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'>
+    <rect x='8' y='12' width='48' height='40' rx='8' fill='none' stroke='#B3ECFF' stroke-width='3'/>
+    <circle cx='24' cy='32' r='5' fill='#B3ECFF'/><circle cx='40' cy='32' r='5' fill='#B3ECFF'/>
+  </svg>`),
+
+  heater: texFromSVG(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'>
+    <rect x='8' y='16' width='48' height='28' rx='4' fill='none' stroke='#B3ECFF' stroke-width='3'/>
+    <g stroke='#8EE7FF' stroke-width='3'>
+      <path d='M16 50 q4-8 0-16' fill='none'/><path d='M28 50 q4-8 0-16' fill='none'/>
+      <path d='M40 50 q4-8 0-16' fill='none'/><path d='M52 50 q4-8 0-16' fill='none'/>
+    </g>
+  </svg>`)
+};
+S.devices = { lights:S.lightSprites, sockets:[], heaters:[] }; // нэг газар цэгцэлнэ
+
+function roomCenter(r){
+  let cx=0, cz=0; r.polygon.forEach(([x,z])=>{cx+=x; cz+=z;});
+  return { x: cx/r.polygon.length, z: cz/r.polygon.length };
+}
+
+function makeSprite(tex, size=0.5){
+  return new THREE.Sprite(new THREE.SpriteMaterial({
+    map:tex, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, opacity:0.9
+  }));
+}
+
+/** pbd.devices байхгүй бол өрөө тус бүрт 1 socket + 1 heater автоматаар тавина. */
+function placeDevices(pbd, { y=2.0 }={}){
+  const rooms = pbd.rooms||[];
+
+  // 1) data
+  const data = Array.isArray(pbd.devices) ? pbd.devices.slice() : [];
+  if (!data.length){
+    for (const r of rooms){
+      const c = roomCenter(r);
+      data.push({ type:'socket', room:r.name, x:c.x-0.6, z:c.z });
+      data.push({ type:'heater', room:r.name, x:c.x+0.6, z:c.z });
+    }
+  }
+
+  // 2) spawn
+  for (const d of data){
+    const kind = (d.type||'').toLowerCase();
+    const size = d.size || 0.55;
+    const sp = makeSprite(kind==='socket'?TEX.socket:TEX.heater, size);
+    sp.position.set(d.x ?? 0, y, d.z ?? 0);
+    sp.scale.set(size,size,size);
+    sp.renderOrder = 3.1;
+
+    if (kind==='socket'){
+      S.devicesG.sockets.add(sp);
+      const item = { id:`S${S.devices.sockets.length+1}`, room:d.room||'room', sprite:sp, on: true };
+      sp.onClick = ()=>{ item.on=!item.on; updateSocketVisual(item); syncRow(item); };
+      S.devices.sockets.push(item);
+      updateSocketVisual(item);
+    }else if (kind==='heater'){
+      S.devicesG.heaters.add(sp);
+      const item = { id:`H${S.devices.heaters.length+1}`, room:d.room||'room', sprite:sp, on:true, set:22 };
+      sp.onClick = ()=>{ item.on=!item.on; updateHeaterVisual(item); syncRow(item); };
+      S.devices.heaters.push(item);
+      updateHeaterVisual(item);
+    }
+  }
+
+  buildDevicesPanel('lights'); // нээхэд шууд гэрэл таб
+}
+
+function updateSocketVisual(it){
+  it.sprite.material.opacity = it.on ? 0.9 : 0.15;
+  it.sprite.material.color.setHex(it.on ? 0xffffff : 0x5a86a0);
+}
+function updateHeaterVisual(it){
+  it.sprite.material.opacity = it.on ? 0.9 : 0.15;
+  it.sprite.material.color.setHex(it.on ? 0xffffff : 0x5a86a0);
+}
+function syncRow(it){ // 3D дээр дарсан үед UI checkbox/slider-тэй синк
+  const row = document.querySelector(`[data-dev="${it.id}"]`);
+  if (!row) return;
+  const chk = row.querySelector('input[type="checkbox"]');
+  if (chk) chk.checked = !!it.on;
+  const range = row.querySelector('input[type="range"]');
+  const out   = row.querySelector('.val');
+  if (range && out){ range.value = it.set; out.textContent = `${it.set}°`; }
+}
+
+function buildDevicesPanel(tab='lights'){
+  const list = document.getElementById('devList'); if (!list) return;
+  list.innerHTML = '';
+
+  if (tab === 'lights'){
+    for (const L of S.devices.lights){
+      const row = document.createElement('div');
+      row.dataset.dev = L.id;
+      row.style.cssText = 'display:flex;align-items:center;gap:6px;margin:6px 0;';
+      row.innerHTML = `
+        <input type="checkbox" ${L.on?'checked':''}>
+        <span style="width:90px;opacity:.9">${L.room}</span>
+        <input type="range" min="0" max="100" value="${L.value}" style="flex:1">
+        <span class="val" style="width:38px;text-align:right">${L.value}%</span>
+      `;
+      const [chk, , range, val] = row.querySelectorAll('input,span');
+      chk.onchange  = ()=>{ L.on = chk.checked; updateLightVisual(L); };
+      const apply=()=>{ L.value=range.value|0; val.textContent=`${L.value}%`; updateLightVisual(L); };
+      range.addEventListener('input',apply,{passive:true}); range.addEventListener('change',apply);
+      list.appendChild(row);
+    }
+    return;
+  }
+
+  if (tab === 'sockets'){
+    for (const SCK of S.devices.sockets){
+      const row = document.createElement('div');
+      row.dataset.dev = SCK.id;
+      row.style.cssText = 'display:flex;align-items:center;gap:6px;margin:6px 0;';
+      row.innerHTML = `
+        <input type="checkbox" ${SCK.on?'checked':''}>
+        <span style="flex:1;opacity:.9">${SCK.room}</span>
+        <span style="width:38px;text-align:right">${SCK.on?'ON':'OFF'}</span>
+      `;
+      const chk = row.querySelector('input[type="checkbox"]');
+      const lab = row.querySelector('span:last-child');
+      chk.onchange = ()=>{ SCK.on = chk.checked; lab.textContent = SCK.on?'ON':'OFF'; updateSocketVisual(SCK); };
+      list.appendChild(row);
+    }
+    return;
+  }
+
+  if (tab === 'heaters'){
+    for (const H of S.devices.heaters){
+      const row = document.createElement('div');
+      row.dataset.dev = H.id;
+      row.style.cssText = 'display:flex;align-items:center;gap:6px;margin:6px 0;';
+      row.innerHTML = `
+        <input type="checkbox" ${H.on?'checked':''}>
+        <span style="width:90px;opacity:.9">${H.room}</span>
+        <input type="range" min="15" max="28" value="${H.set}" style="flex:1">
+        <span class="val" style="width:38px;text-align:right">${H.set}°</span>
+      `;
+      const [chk, , range, val] = row.querySelectorAll('input,span');
+      chk.onchange = ()=>{ H.on = chk.checked; updateHeaterVisual(H); };
+      const apply = ()=>{ H.set = range.value|0; val.textContent = `${H.set}°`; /* энд API дуудлага хийж болно */ };
+      range.addEventListener('input',apply,{passive:true}); range.addEventListener('change',apply);
+      list.appendChild(row);
+    }
+  }
+}
+
 </script>
 </body>
 </html>
