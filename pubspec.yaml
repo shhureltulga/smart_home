@@ -21,6 +21,25 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^4.0.0
+  flutter_launcher_icons: ^0.14.4
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+
+  # Fallback зураг (хоёуланд — зарим лаунчер/олдворуудад хэрэгтэй)
+  image_path: assets/icons/home-es_icon.png
+
+  # iOS тусгай тохиргоо
+  remove_alpha_ios: true
+  ios_icon_name: "AppIcon"
+
+  # Android adaptive icon давхаргууд (эдгээр PNG-үүдээ төслийнхөө assets руу хуул)
+  adaptive_icon_background: assets/icons/android/ic_background.png
+  adaptive_icon_foreground: assets/icons/android/ic_foreground.png
+  adaptive_icon_monochrome: assets/icons/android/ic_monochrome.png
+  min_sdk_android: 21
+
 flutter:
   uses-material-design: true
   assets:
