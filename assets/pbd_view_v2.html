@@ -7,51 +7,69 @@
   <style>
     html,body{margin:0;background:#071018;color:#b8d9e9}
     #wrap{position:relative;width:100vw;height:100vh;overflow:hidden}
-
-    /* Fullscreen */
-    #wrap.fs{
-      position:fixed !important; inset:0 !important;
-      width:100vw !important; height:100dvh !important;
-      z-index:2147483647 !important; background:#071018;
-    }
-    #wrap.fs #ui{
-      position:fixed !important; top:10px !important; right:10px !important; left:auto !important;
-      z-index:2147483647 !important; pointer-events:auto;
-    }
-
-    #ui{position:absolute;right:10px;top:10px;z-index:10;background:#0b1520cc;
-        padding:8px 10px;border-radius:10px;font:13px system-ui}
+    #wrap.fs{position:fixed!important;inset:0!important;width:100vw!important;height:100dvh!important;z-index:2147483647!important;background:#071018;}
+    #wrap.fs #ui{position:fixed!important;top:10px!important;right:10px!important;left:auto!important;z-index:2147483647!important;pointer-events:auto;}
+    #ui{position:absolute;right:10px;top:10px;z-index:10;background:#0b1520cc;padding:8px 10px;border-radius:10px;font:13px system-ui}
     #ui label{margin-left:8px}
     #loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#7aa7be}
     #wrap::after{content:"";position:absolute;inset:0;pointer-events:none;
       background:radial-gradient(1200px 600px at 70% -20%, #1a4b62aa, transparent 60%),
                  radial-gradient(900px 500px at 10% 110%, #0e2a38aa, transparent 55%);
       mix-blend-mode:screen;opacity:.60}
-
-    /* FS/Exit товч */
     #btnFS,#btnExitFS{margin-left:8px;padding:2px 8px;border:0;border-radius:6px;background:#123;color:#b8d9e9}
     #btnFS:hover,#btnExitFS:hover{background:#1a2c3a}
-
-    /* Lights panel */
-    #lightsPanel{position:absolute; right:10px; top:54px; z-index:11; background:#0b1520cc;
-      border-radius:12px; padding:10px; width:240px; font:13px system-ui; display:none}
+    #lightsPanel{position:absolute; right:10px; top:54px; z-index:11; background:#0b1520cc;border-radius:12px; padding:10px; width:240px; font:13px system-ui; display:none}
     #lightsList{max-height:260px; overflow:auto}
     .light-row{display:flex; align-items:center; gap:6px; margin:6px 0; padding:2px 4px; border-radius:6px}
     .light-row.hover{background:#0f1f2b}
     .light-name{width:80px;opacity:.9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .light-range{flex:1}
-
-    /* compact үед жижиг чекүүдийг нуух */
-      #wrap.compact #ui .hidable-sm { display:none; }
-
-      /* UI мөр хэт урт бол overflow bit сайхан таслах */
-      #ui{ display:flex; align-items:center; flex-wrap:wrap; gap:6px; }
-      #ui > *{ white-space:nowrap; }
-
-
+    #wrap.compact #ui .hidable-sm { display:none; }
+    #ui{ display:flex; align-items:center; flex-wrap:wrap; gap:6px; }
+    #ui > *{ white-space:nowrap; }
     #devicesPanel .tab{all:unset;cursor:pointer;padding:6px 10px;border-radius:8px;background:#10202b}
     #devicesPanel .tab.on{background:#153246}
 
+    /* === DEVICE POPUP === */
+    #device-popup{
+      position:absolute;
+      min-width:220px;
+      max-width:260px;
+      padding:10px 12px;
+      background:#0b1520f0;
+      color:#e3f3ff;
+      border-radius:10px;
+      box-shadow:0 8px 24px rgba(0,0,0,.65);
+      font:13px system-ui;
+      display:none;
+      z-index:20;
+      pointer-events:auto;
+
+      /* 👇 ШИНЭ: дэлгэцнээс доош хэтэрвэл дотор нь скроллоно */
+      max-height:65vh;
+      overflow:auto;
+    }
+    #device-popup h4{
+      margin:0 0 6px;
+      font-size:14px;
+    }
+    #device-popup .dp-row{ margin:3px 0; }
+    #device-popup button{
+      cursor:pointer;
+      border:0;
+      border-radius:6px;
+      padding:3px 8px;
+      background:#123040;
+      color:#e3f3ff;
+      font:12px system-ui;
+    }
+    #device-popup button:hover{ background:#18425a; }
+    #device-popup .dp-footer{
+      margin-top:6px;
+      text-align:right;
+      font-size:11px;
+      opacity:.7;
+    }
   </style>
 
   <script type="importmap">{
@@ -67,21 +85,15 @@
 <div id="wrap">
   <div id="loading">Loading…</div>
 
-  <!-- UI-г wrap ДОТОР нь байрлуулсан -->
   <div id="ui">
-     <button id="btnFit">Fit</button>
-  <label><input id="chkFloor"  type="checkbox" checked> Floor</label>
-  <label><input id="chkWalls"  type="checkbox" checked> Walls</label>
-
-  <!-- Хэрвээ чекээр нь харуулах шаардлагагүй бол энэ ч бас hidable-sm байж болно -->
-  <label class="hidable-sm"><input id="chkLights" type="checkbox" checked> Lights</label>
-
-  <!-- ЭНД НУУХ -->
-  <label class="hidable-sm"><input id="chkCurtains" type="checkbox" checked> Curtains</label>
-  <label class="hidable-sm"><input id="chkLabels" hidden="true"  type="checkbox" checked> Labels</label>
-
-  <button id="btnLightsCfg" hidden="true" style="margin-left:8px;">⚡ Lights…</button>
-    <button id="btnFS"    hidden="true"  title="Fullscreen">⤢</button>
+    <button id="btnFit">Fit</button>
+    <label><input id="chkFloor"  type="checkbox" checked> Floor</label>
+    <label><input id="chkWalls"  type="checkbox" checked> Walls</label>
+    <label class="hidable-sm"><input id="chkLights" type="checkbox" checked> Lights</label>
+    <label class="hidable-sm"><input id="chkCurtains" type="checkbox" checked> Curtains</label>
+    <label class="hidable-sm"><input id="chkLabels" type="checkbox" > Labels</label>
+    <button id="btnLightsCfg" hidden="true" style="margin-left:8px;">⚡ Lights…</button>
+    <button id="btnFS" hidden="true" title="Fullscreen">⤢</button>
     <button id="btnExitFS" hidden="true" title="Exit" style="display:none">⤡</button>
 
     <div id="lightsPanel">
@@ -91,24 +103,26 @@
       </div>
       <div id="lightsList"></div>
     </div>
+
+    <label><input id="chkSensors" type="checkbox" checked> Sensors</label>
     <label><input id="chkSockets" type="checkbox" checked> Sockets</label>
-<label><input id="chkHeaters" type="checkbox" checked> Heaters</label>
-<button id="btnDevices" style="margin-left:8px;">⚡ Devices…</button>
+    <label><input id="chkHeaters" type="checkbox" checked> Heaters</label>
+    <!-- <button id="btnDevices" style="margin-left:8px;">⚡ Devices…</button> -->
 
-<div id="devicesPanel" style="
-  position:absolute;right:10px;top:54px;z-index:11;display:none;
-  background:#0b1520cc;border-radius:12px;padding:10px;width:280px;font:13px system-ui;">
-  <div style="display:flex;gap:6px;margin-bottom:8px">
-    <button data-tab="lights"  class="tab on">Lights</button>
-    <button data-tab="sockets" class="tab">Sockets</button>
-    <button data-tab="heaters" class="tab">Heaters</button>
-    <div style="flex:1"></div>
-    <button id="btnCloseDevices" style="all:unset;cursor:pointer;padding:4px 6px;background:#12202b;border-radius:6px">×</button>
+    <!-- <div id="devicesPanel" style="position:absolute;right:10px;top:54px;z-index:11;display:none;background:#0b1520cc;border-radius:12px;padding:10px;width:280px;font:13px system-ui;">
+      <div style="display:flex;gap:6px;margin-bottom:8px">
+        <button data-tab="lights"  class="tab on">Lights</button>
+        <button data-tab="sockets" class="tab">Sockets</button>
+        <button data-tab="heaters" class="tab">Heaters</button>
+        <div style="flex:1"></div>
+        <button id="btnCloseDevices" style="all:unset;cursor:pointer;padding:4px 6px;background:#12202b;border-radius:6px">×</button>
+      </div>
+      <div id="devList" style="max-height:260px;overflow:auto"></div>
+    </div> -->
   </div>
-  <div id="devList" style="max-height:260px;overflow:auto"></div>
-</div>
 
-  </div>
+  <!-- Device popup -->
+  <div id="device-popup"></div>
 </div>
 
 <script type="module">
@@ -118,6 +132,7 @@ import { CSS2DRenderer, CSS2DObject } from "three/examples/jsm/renderers/CSS2DRe
 
 const wrap = document.getElementById('wrap');
 const loading = document.getElementById('loading');
+const devicePopupEl = document.getElementById('device-popup');
 
 const THEME = { bg:'#0A1520', fog:'#0A1520', grid1:0x123241, grid2:0x0b2330, wall:0x59D6FF, edge:0xB3ECFF, roomLabel:'#9ddfff' };
 
@@ -126,52 +141,46 @@ const S = {scene:null, cam:null, renderer:null, labelRenderer:null, controls:nul
            lightSprites:[], lightBaseOpacity:0.9};
 
 const LIGHT_DIM_OPACITY = 0.12, LIGHT_DIM_TINT = 0x5a86a0, LIGHT_ON_TINT = 0xffffff;
+const EPS = 1e-3;
+
+/* ==== Room centers map ==== */
+const ROOM_CENTER = new Map();
 
 /* ---------- Util ---------- */
 function resizeNow(){
   const W = wrap.clientWidth, H = wrap.clientHeight;
   S.cam.aspect = W/H; S.cam.updateProjectionMatrix();
   S.renderer.setSize(W,H); S.labelRenderer.setSize(W,H);
-   updateCompactUI(); 
+  updateCompactUI();
 }
 window.fitNow = (pad=1.35) => { resizeNow(); fitToContent(pad); };
 
-// parent хэмжээ өөрчлөгдвөл автоматаар дахин fit
 new ResizeObserver(() => window.fitNow()).observe(wrap);
+
 function fitToContent(pad = 1.25){
-  // Хамгийн сүүлийн bbox-оо ашигла; байхгүй бол сценаас үүсгэнэ
-  const box = (S.bbox && !S.bbox.isEmpty())
-    ? S.bbox.clone()
-    : new THREE.Box3().setFromObject(S.wallsG || S.scene);
+  const box = (S.bbox && !S.bbox.isEmpty()) ? S.bbox.clone()
+            : new THREE.Box3().setFromObject(S.wallsG || S.scene);
 
-  const size   = box.getSize(new THREE.Vector3());   // x,y,z хэмжээ
-  const center = box.getCenter(new THREE.Vector3()); // төв
+  const size   = box.getSize(new THREE.Vector3());
+  const center = box.getCenter(new THREE.Vector3());
 
-  // Камерын FOV ба дэлгэцийн харьцааг ашиглан зайг бодно
   const fov    = THREE.MathUtils.degToRad(S.cam.fov);
-  const aspect = S.renderer.domElement.clientWidth /
-                 Math.max(1, S.renderer.domElement.clientHeight);
+  const aspect = S.renderer.domElement.clientWidth / Math.max(1, S.renderer.domElement.clientHeight);
 
   const distForHeight = (size.y / 2) / Math.tan(fov / 2);
   const distForWidth  = (size.x / 2) / (Math.tan(fov / 2) * aspect);
-
-  // Аюулгүй зай + padding
   const dist = pad * Math.max(distForHeight, distForWidth, size.z);
 
-  // Камерыг диагональ чиглэлд байрлуулна (гоё өнцөг)
   const dir = new THREE.Vector3(1, 0.6, 1).normalize();
   S.cam.position.copy(center).add(dir.multiplyScalar(dist));
 
-  // Near/Far-ийг шинэ хэмжээтэй тааруулж өг
   S.cam.near = Math.max(0.05, dist / 1000);
   S.cam.far  = Math.max(1000, dist * 8);
   S.cam.updateProjectionMatrix();
 
-  // Орбитын төвийг яг боксын төв рүү
   S.controls.target.copy(center);
   S.controls.update();
 }
-
 
 /* === INIT унших туслах === */
 function getInit(){
@@ -179,55 +188,739 @@ function getInit(){
   return {
     baseUrl: i.baseUrl ?? q.get('baseUrl') ?? "",
     siteId : i.siteId  ?? q.get('siteId')  ?? "",
-    jwt    : i.jwt     ?? q.get('jwt')     ?? ""
+    floorId: i.floorId ?? q.get('floorId') ?? "",
+    jwt    : i.jwt     ?? q.get('jwt')     ?? "",
+    haUrl  : i.haUrl   ?? q.get('haUrl')   ?? "",
+    haToken: i.haToken ?? q.get('haToken') ?? ""
   };
 }
 
-/* ✅ Flutter injection-ийн дараа дуудагдана */
-window.start = async () => {
+/* === Home Assistant helpers === */
+async function haGetState(entityId){
+  const { haUrl, haToken } = getInit();
+  if (!haUrl || !haToken || !entityId) return null;
   try{
-    const { baseUrl, siteId, jwt } = getInit();
-
-    const loadPBD = async () => {
-      if (!baseUrl || !siteId || !jwt) {
-        return fetch('./pbd.json').then(r=>r.json());
-      }
-      const auth = /^Bearer /.test(jwt) ? jwt : `Bearer ${jwt}`;
-      loading.textContent = 'Fetching latest…';
-      const latestRes = await fetch(`${baseUrl}/api/site/${siteId}/pbd/latest`, { headers:{Authorization:auth}, cache:'no-store' });
-      if (!latestRes.ok) throw new Error('latest ' + latestRes.status);
-      const latest = await latestRes.json();
-      const url = latest.url || latest.file?.url || latest.data?.url || latest.result?.url;
-      if (!url) throw new Error('No PBD URL in latest payload');
-      const pbdUrl = /^https?:\/\//i.test(url) ? url : `${baseUrl}${url}`;
-      const pbdRes = await fetch(pbdUrl, { headers:{Authorization:auth}, cache:'no-store' });
-      if (!pbdRes.ok) throw new Error('pbd ' + pbdRes.status);
-      return pbdRes.json();
-    };
-
-    const pbd = await loadPBD();
-    flipZ(pbd);
-    init3D();
-    updateCompactUI(); 
-    S.bbox = buildFromPBD(pbd);
-    hookUI();                              // бүх listener-аа эндээс нэг удаа
-    loading.remove();
-    fitToContent(1.25);
-    animate();
-
+    const base = haUrl.replace(/\/$/,'');
+    const res = await fetch(`${base}/api/states/${encodeURIComponent(entityId)}`, {
+      headers:{ 'Authorization': `Bearer ${haToken}` },
+      cache:'no-store'
+    });
+    if (!res.ok) {
+      console.warn('haGetState status', res.status);
+      return null;
+    }
+    return await res.json();
   }catch(e){
-    loading.textContent = 'ERR: ' + (e?.message || e);
+    console.warn('haGetState error', e);
+    return null;
   }
+}
+
+async function haCallService(domain, service, data){
+  const { haUrl, haToken } = getInit();
+  if (!haUrl || !haToken) {
+    console.warn('HA not configured, skip service', domain, service, data);
+    return null;
+  }
+  try{
+    const base = haUrl.replace(/\/$/,'');
+    const res = await fetch(`${base}/api/services/${encodeURIComponent(domain)}/${encodeURIComponent(service)}`, {
+      method:'POST',
+      headers:{
+        'Authorization': `Bearer ${haToken}`,
+        'Content-Type':'application/json'
+      },
+      body: JSON.stringify(data || {})
+    });
+    if (!res.ok) {
+      console.warn('haCallService status', res.status);
+      return null;
+    }
+    return await res.json();
+  }catch(e){
+    console.warn('haCallService error', e);
+    return null;
+  }
+}
+
+/* === Popup helpers === */
+function showDevicePopup(x, y, html){
+  if (!devicePopupEl) return;
+
+  devicePopupEl.innerHTML = html;
+  devicePopupEl.style.display = 'block';
+
+  // түр байрлуулж хэмжээ нь хэд байгааг авна
+  devicePopupEl.style.left = '0px';
+  devicePopupEl.style.top  = '0px';
+
+  const wrapRect = wrap.getBoundingClientRect();
+  const popRect  = devicePopupEl.getBoundingClientRect();
+
+  let px = x - wrapRect.left + 10;
+  let py = y - wrapRect.top  + 10;
+
+  const maxX = wrapRect.width  - popRect.width  - 8;
+  const maxY = wrapRect.height - popRect.height - 8;
+
+  if (px > maxX) px = Math.max(8, maxX);
+  if (py > maxY) py = Math.max(8, maxY);
+  if (px < 8) px = 8;
+  if (py < 8) py = 8;
+
+  devicePopupEl.style.left = px + 'px';
+  devicePopupEl.style.top  = py + 'px';
+}
+
+function hideDevicePopup(){
+  if (devicePopupEl) devicePopupEl.style.display = 'none';
+}
+
+function detectUiTypeForDevice(domain, meta, haState){
+  const d = (domain || '').toLowerCase();
+  if (d === 'climate' || /thermostat/.test((meta?.type||'').toLowerCase())) return 'climate';
+  if (['switch','light','fan','input_boolean'].includes(d)) return 'toggle';
+  if (d === 'cover') return 'cover';
+  return 'sensor';
+}
+
+function buildDevicePopupHtml(uiType, ctx){
+  const { name, domain, entityId, meta, haState } = ctx;
+  const noteHa = (!entityId)
+    ? '<div class="dp-footer">No entityId linked</div>'
+    : (!haState ? '<div class="dp-footer">HA state not available</div>' : '');
+
+  if (uiType === 'sensor'){
+    const st = haState;
+    const val = st ? st.state : (meta?.state ?? '—');
+    const unit = (st?.attributes?.unit_of_measurement) || meta?.unit || '';
+    return `
+      <h4>${name}</h4>
+      <div class="dp-row">Value: <b>${val} ${unit}</b></div>
+      ${noteHa}
+    `;
+  }
+
+  if (uiType === 'toggle'){
+    const st = haState;
+    const on = st ? (st.state === 'on') : !!meta?.isOn;
+    const label = on ? 'ON' : 'OFF';
+    return `
+      <h4>${name}</h4>
+      <div class="dp-row">Status: <b id="dp-tg-status">${label}</b></div>
+      <div class="dp-row"><button id="dp-tg-btn">${on ? 'Turn off' : 'Turn on'}</button></div>
+      ${noteHa}
+    `;
+  }
+
+  if (uiType === 'climate'){
+    const st = haState;
+    const cur = st?.attributes?.current_temperature ?? meta?.currentTemp ?? '—';
+    const target = st?.attributes?.temperature ?? meta?.targetTemp ?? cur ?? '—';
+    const unit = st?.attributes?.unit_of_measurement || meta?.unit || '°C';
+    const mode = st?.attributes?.hvac_mode || meta?.mode || '';
+    return `
+      <h4>${name}</h4>
+      <div class="dp-row">Current: <b>${cur}${unit}</b></div>
+      <div class="dp-row">Set:
+        <button id="dp-cl-dec">-</button>
+        <span id="dp-cl-val" style="margin:0 8px;">${target}</span>${unit}
+        <button id="dp-cl-inc">+</button>
+      </div>
+      <div class="dp-row" style="font-size:12px;opacity:.8;">Mode: ${mode || domain}</div>
+      ${noteHa}
+    `;
+  }
+
+  if (uiType === 'cover'){
+    const st = haState;
+    const stateLabel = st?.state || meta?.state || 'unknown';
+    return `
+      <h4>${name}</h4>
+      <div class="dp-row">State: <b>${stateLabel}</b></div>
+      <div class="dp-row">
+        <button id="dp-cv-open">Open</button>
+        <button id="dp-cv-stop">Stop</button>
+        <button id="dp-cv-close">Close</button>
+      </div>
+      ${noteHa}
+    `;
+  }
+
+  return `<h4>${name}</h4><div class="dp-row">No controls</div>${noteHa}`;
+}
+
+function attachDevicePopupHandlers(uiType, ctx){
+  const { entityId, domain } = ctx;
+  if (!entityId) return; // HA байхгүй үед control ажиллуулахгүй
+
+  if (uiType === 'toggle'){
+    const btn = document.getElementById('dp-tg-btn');
+    const label = document.getElementById('dp-tg-status');
+    if (!btn || !label) return;
+    btn.onclick = async () => {
+      const isOn = label.textContent === 'ON';
+      await haCallService(domain || 'switch', isOn ? 'turn_off' : 'turn_on', { entity_id: entityId });
+      label.textContent = isOn ? 'OFF' : 'ON';
+      btn.textContent   = isOn ? 'Turn on' : 'Turn off';
+    };
+  }
+
+  if (uiType === 'climate'){
+    const span = document.getElementById('dp-cl-val');
+    const dec  = document.getElementById('dp-cl-dec');
+    const inc  = document.getElementById('dp-cl-inc');
+    if (!span || !dec || !inc) return;
+    let val = parseFloat(span.textContent) || 0;
+    const send = async () => {
+      await haCallService('climate','set_temperature',{ entity_id: entityId, temperature: val });
+    };
+    dec.onclick = async () => { val = Math.round((val - 0.5)*10)/10; span.textContent = val.toFixed(1); await send(); };
+    inc.onclick = async () => { val = Math.round((val + 0.5)*10)/10; span.textContent = val.toFixed(1); await send(); };
+  }
+
+  if (uiType === 'cover'){
+    const open  = document.getElementById('dp-cv-open');
+    const stop  = document.getElementById('dp-cv-stop');
+    const close = document.getElementById('dp-cv-close');
+    if (!open || !stop || !close) return;
+    const call = (svc) => haCallService('cover', svc, { entity_id: entityId });
+    open.onclick  = () => call('open_cover');
+    stop.onclick  = () => call('stop_cover');
+    close.onclick = () => call('close_cover');
+  }
+}
+
+/* === Multi-sensor popup === */
+const SENSOR_META = {
+  lqi:               { label: 'Link quality (LQI)', unit: '',   order: 5 },
+  battery:           { label: 'Баттерей',           unit: '%',  order: 10 },
+  temperature_local: { label: 'Температур (local)', unit: '°C', order: 20 },
+  temperature:       { label: 'Температур',         unit: '°C', order: 21 },
+  temperature_max:   { label: 'Темп. max',          unit: '°C', order: 22 },
+  temperature_min:   { label: 'Темп. min',          unit: '°C', order: 23 },
+  pressure:          { label: 'Агаарын даралт',     unit: 'hPa',order: 30 },
+  humidity:          { label: 'Харьцангуй чийг',    unit: '%',  order: 40 },
 };
 
-/* XY→XZ flip */
-function flipZ(pbd){
-  const axis = String(pbd.global?.axis || 'XY').toUpperCase();
-  if (axis !== 'XY') return;
-  (pbd.rooms||[]).forEach(r=>{ r.polygon = (r.polygon||[]).map(([x,y]) => [x, -y]); });
-  (pbd.openings||[]).forEach(o=>{ if(o.a) o.a=[o.a[0],-o.a[1]]; if(o.b) o.b=[o.b[0],-o.b[1]]; });
-  (pbd.curtains||[]).forEach(c=>{ if(c.a) c.a=[c.a[0],-c.a[1]]; if(c.b) c.b=[c.b[0],-c.b[1]]; });
+function renderSensorRows(device, sensors){
+  return sensors
+    .slice()
+    .sort((a, b) => {
+      const oa = SENSOR_META[a.entityKey]?.order ?? 999;
+      const ob = SENSOR_META[b.entityKey]?.order ?? 999;
+      if (oa !== ob) return oa - ob;
+      return String(a.entityKey).localeCompare(String(b.entityKey));
+    })
+    .map(s => {
+      const meta = SENSOR_META[s.entityKey] || {};
+      const title = meta.label || s.entityKey;
+      const unit  = s.unit || meta.unit || '';
+      const val   = (s.value ?? s.value === 0) ? s.value : '—';
+      return `
+        <div class="dp-row" style="display:flex;justify-content:space-between;gap:8px;">
+          <span style="opacity:.8">${title}</span>
+          <b>${val}${unit ? ' ' + unit : ''}</b>
+        </div>
+      `;
+    })
+    .join('');
 }
+
+function buildSensorsPopupHtml(device, sensors){
+  const name = device.name || device.label || device.deviceKey || 'Device';
+  const rows = renderSensorRows(device, sensors);
+
+  return `
+    <h4>${name}</h4>
+    ${device.deviceKey ? `<div style="font-size:11px;opacity:.6;margin-bottom:4px;">${device.deviceKey}</div>` : ''}
+    ${rows || `<div class="dp-row">Мэдрэгчийн утга алга</div>`}
+  `;
+}
+function buildSensorsWithControlsPopupHtml(uiType, ctx){
+  const { name, domain, entityId, meta, haState, sensors } = ctx;
+
+  const rows = renderSensorRows(meta, sensors);
+  const noteHa = (!entityId)
+    ? '<div class="dp-footer">No entityId linked</div>'
+    : (!haState ? '<div class="dp-footer">HA state not available</div>' : '');
+
+  if (uiType === 'climate'){
+    const st    = haState;
+    const cur   = st?.attributes?.current_temperature ?? meta?.currentTemp ?? '—';
+    const target= st?.attributes?.temperature ?? meta?.targetTemp ?? cur ?? '—';
+    const unit  = st?.attributes?.unit_of_measurement || meta?.unit || '°C';
+    const mode  = st?.attributes?.hvac_mode || meta?.mode || '';
+
+    return `
+      <h4>${name}</h4>
+      ${meta.deviceKey ? `<div style="font-size:11px;opacity:.6;margin-bottom:4px;">${meta.deviceKey}</div>` : ''}
+      ${rows}
+      <hr style="border:none;border-top:1px solid rgba(255,255,255,.08);margin:6px 0 4px;">
+      <div class="dp-row">Current: <b>${cur}${unit}</b></div>
+      <div class="dp-row">Set:
+        <button id="dp-cl-dec">-</button>
+        <span id="dp-cl-val" style="margin:0 8px;">${target}</span>${unit}
+        <button id="dp-cl-inc">+</button>
+      </div>
+      <div class="dp-row" style="font-size:12px;opacity:.8;">Mode: ${mode || domain}</div>
+      ${noteHa}
+    `;
+  }
+
+  if (uiType === 'toggle'){
+    const st  = haState;
+    const on  = st ? (st.state === 'on') : !!meta?.isOn;
+    const lbl = on ? 'ON' : 'OFF';
+
+    return `
+      <h4>${name}</h4>
+      ${meta.deviceKey ? `<div style="font-size:11px;opacity:.6;margin-bottom:4px;">${meta.deviceKey}</div>` : ''}
+      ${rows}
+      <hr style="border:none;border-top:1px solid rgba(255,255,255,.08);margin:6px 0 4px;">
+      <div class="dp-row">Status: <b id="dp-tg-status">${lbl}</b></div>
+      <div class="dp-row"><button id="dp-tg-btn">${on ? 'Turn off' : 'Turn on'}</button></div>
+      ${noteHa}
+    `;
+  }
+
+  // бусад тохиолдолд зүгээр sensors popup
+  return buildSensorsPopupHtml(meta, sensors) + noteHa;
+}
+
+
+async function handleDeviceClick(ev, meta){
+  try{
+    const sensors = Array.isArray(meta.sensors) ? meta.sensors : [];
+
+    const entityId =
+      meta.haEntityId ||
+      meta.entityId ||
+      meta.entity_id ||
+      meta.ha_entity_id ||
+      null;
+
+    const domFromEntity = entityId ? entityId.split('.')[0] : '';
+    const domain = (domFromEntity || meta.domain || inferDomain(meta)).toLowerCase();
+    const name = meta.name || meta.label || meta.deviceKey || entityId || 'Device';
+
+    const haState = entityId ? await haGetState(entityId) : null;
+    const uiType  = detectUiTypeForDevice(domain, meta, haState);
+    const ctx     = { name, domain, entityId, meta, haState, sensors };
+
+    let html;
+    if (sensors.length && (uiType === 'climate' || uiType === 'toggle' || uiType === 'cover')){
+      // multi-sensor thermostat / light / switch → sensors + control
+      html = buildSensorsWithControlsPopupHtml(uiType, ctx);
+    } else if (sensors.length){
+      // зөвхөн sensors
+      html = buildSensorsPopupHtml(meta, sensors);
+    } else {
+      // single entity → хуучин popup
+      html = buildDevicePopupHtml(uiType, ctx);
+    }
+
+    showDevicePopup(ev.clientX, ev.clientY, html);
+    attachDevicePopupHandlers(uiType, ctx);
+  }catch(e){
+    console.error('handleDeviceClick error', e);
+  }
+}
+
+/* === API: Devices татах === */
+async function loadDevices(){
+  const { baseUrl, siteId, floorId, jwt } = getInit();
+  if (!baseUrl || !siteId || !jwt) return [];
+  const auth = /^Bearer /.test(jwt) ? jwt : `Bearer ${jwt}`;
+  const url  = `${baseUrl}/api/sites/${encodeURIComponent(siteId)}/floors/${encodeURIComponent(floorId)}/devices`;
+  const res = await fetch(url, { headers: { Authorization: auth }, cache: 'no-store' });
+  if (!res.ok) throw new Error('devices ' + res.status);
+  const data = await res.json();
+  return data.devices || [];
+}
+
+/* ==================== Devices util ==================== */
+function inferDomain(d){
+  const t = ((d.type || d.deviceClass || '') + '').toLowerCase();
+  if (/(light|bulb|lamp)/.test(t)) return 'light';
+  if (/(socket|plug|outlet|switch)/.test(t)) return 'socket';
+  if (/(heater|climate|thermostat|radiator)/.test(t)) return 'heater';
+  return 'sensor';
+}
+function isZeroPos(p){ return !p || ((+p.x||0)===0 && (+p.z||0)===0); }
+
+/**
+ * Давхардсан device-үүдийг өрөөний төвөөс тойруулж байрлуулах
+ * - pos.x/z = 0 байвал ROOM_CENTER[roomId]-ын эргэн тойронд тараана
+ * - pos байгаа (0 биш) бол өөрийнхийг нь үлдээе
+ */
+function enrichDevicesWithRoomCenter(list, { baseRadius = 0.6, ringStep = 0.45 } = {}) {
+  const out = [];
+  const groups = new Map(); // roomId → devices[]
+
+  // 1) domain infer хийгээд room-аар бүлэглэе
+  for (const d of (list || [])) {
+    const dev = { ...d };
+    if (!dev.domain) dev.domain = inferDomain(dev);
+
+    // аль хэдийн өөрийн pos-той (0,0 биш) бол орхи
+    if (dev.pos && !isZeroPos(dev.pos)) {
+      out.push(dev);
+      continue;
+    }
+
+    const key = dev.roomId || '_no_room_';
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(dev);
+  }
+
+  // 2) Өрөө бүр дээрх төхөөрөмжүүдийг тойрог дээр тараана
+  for (const [roomId, devs] of groups.entries()) {
+    // төв координат
+    const c = ROOM_CENTER.get(roomId) || { x: 0, z: 0 };
+
+    const n = devs.length;
+    if (n === 1) {
+      // ганц байвал яг төвд нь
+      const d = devs[0];
+      const y = d.pos?.y ?? 0.9;
+      d.pos = { x: c.x, y, z: c.z };
+      out.push(d);
+      continue;
+    }
+
+    for (let i = 0; i < n; i++) {
+      const d = devs[i];
+      const y = d.pos?.y ?? 0.9;
+
+      const ring = Math.floor(i / 6);          // 0..5 хүртэл 1 тойрог, 6-11 дараагийн тойрог гэх мэт
+      const angle = (2 * Math.PI * i) / Math.max(1, n);
+      const r = baseRadius + ring * ringStep;  // 0.6, 1.05, 1.5 ...
+
+      const x = c.x + Math.cos(angle) * r;
+      const z = c.z + Math.sin(angle) * r;
+
+      d.pos = { x, y, z };
+      out.push(d);
+    }
+  }
+
+  return out;
+}
+
+/* ==================== Label → icon → sprite ==================== */
+const LABEL_ICONS = {
+  motion: '👣',
+  door: '🚪',
+  window: '🪟',
+  thermostat: '🌡️',
+  thermometer: '🌡️',
+  climate: '🌬️',
+  coordinator: '🧩',
+  dongle: '🧩',
+  light: '💡',
+  plug: '🔌',
+  socket: '🔌',
+  switch: '🔀',
+  fan: '🌀',
+  heater: '🔥',
+  camera: '📷',
+  sensor: '📟',
+};
+
+function iconForLabel(label) {
+  if (!label) return LABEL_ICONS.sensor;
+  const k = String(label).toLowerCase();
+  if (LABEL_ICONS[k]) return LABEL_ICONS[k];
+  const tokens = k.replace(/^mdi:/, '').replace(/[^a-z0-9]+/g, ' ').split(' ');
+  for (const t of tokens) if (LABEL_ICONS[t]) return LABEL_ICONS[t];
+  return LABEL_ICONS.sensor;
+}
+
+function makeLabeledSprite(label, name, size) {
+  size = size || 192;
+  const canvas = document.createElement('canvas');
+  canvas.width = size; canvas.height = size;
+  const ctx = canvas.getContext('2d');
+
+  ctx.beginPath();
+  ctx.arc(size/2, size/2.6, 48, 0, Math.PI*2);
+  ctx.fillStyle = 'rgba(30,144,255,0.92)';
+  ctx.fill();
+
+  ctx.font = '64px system-ui, "Apple Color Emoji", "Segoe UI Emoji"';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#fff';
+  ctx.fillText(iconForLabel(label), size/2, size/2.6);
+
+  ctx.font = 'bold 22px Inter, system-ui, sans-serif';
+  ctx.fillStyle = '#e6f2ff';
+  ctx.fillText(String(label), size/2, size-56);
+
+  if (name) {
+    ctx.font = '18px Inter, system-ui, sans-serif';
+    ctx.fillStyle = '#cfe8ff';
+    ctx.fillText(String(name), size/2, size-28);
+  }
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.minFilter = THREE.LinearFilter;
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false });
+  const sp = new THREE.Sprite(mat);
+  sp.scale.set(1.4, 1.4, 1);
+  sp.renderOrder = 3.2;
+  return sp;
+}
+
+function texFromSVG(svg){
+  return new THREE.TextureLoader().load(`data:image/svg+xml;utf8,${encodeURIComponent(svg)}`);
+}
+
+const TEX = {
+  // гэрэл
+  light: texFromSVG(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'>
+    <defs><radialGradient id='g' cx='0.5' cy='0.5' r='0.5'>
+      <stop offset='0' stop-color='#fff'/><stop offset='1' stop-color='#59D6FF' stop-opacity='0'/></radialGradient></defs>
+    <circle cx='32' cy='32' r='10' fill='#E8FAFF'/><circle cx='32' cy='32' r='22' fill='url(#g)'/>
+    <g stroke='#B3ECFF' stroke-width='3' stroke-linecap='round' opacity='0.95'>
+      <line x1='32' y1='4'  x2='32' y2='14'/><line x1='32' y1='50' x2='32' y2='60'/>
+      <line x1='4'  y1='32' x2='14' y2='32'/><line x1='50' y1='32' x2='60' y2='32'/>
+      <line x1='10' y1='10' x2='18' y2='18'/><line x1='46' y1='46' x2='54' y2='54'/>
+      <line x1='10' y1='54' x2='18' y2='46'/><line x1='46' y1='18' x2='54' y2='10'/>
+    </g></svg>`),
+
+  // залгуур / унтраалга
+  socket: texFromSVG(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'>
+    <rect x='8' y='12' width='48' height='40' rx='8'
+      fill='none' stroke='#B3ECFF' stroke-width='3'/>
+    <circle cx='24' cy='32' r='5' fill='#B3ECFF'/>
+    <circle cx='40' cy='32' r='5' fill='#B3ECFF'/>
+  </svg>`),
+
+  // паар / heater
+  heater: texFromSVG(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'>
+    <rect x='8' y='16' width='48' height='28' rx='4'
+      fill='none' stroke='#B3ECFF' stroke-width='3'/>
+    <g stroke='#8EE7FF' stroke-width='3'>
+      <path d='M16 50 q4-8 0-16' fill='none'/>
+      <path d='M28 50 q4-8 0-16' fill='none'/>
+      <path d='M40 50 q4-8 0-16' fill='none'/>
+      <path d='M52 50 q4-8 0-16' fill='none'/>
+    </g>
+  </svg>`),
+
+  // digital thermostat (setpoint)
+  thermostat: texFromSVG(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'>
+    <rect x='10' y='18' width='44' height='28' rx='6'
+      fill='none' stroke='#B3ECFF' stroke-width='3'/>
+    <rect x='16' y='24' width='32' height='12' rx='3'
+      fill='#0B1F2C' stroke='#8EE7FF' stroke-width='2'/>
+    <text x='32' y='33' text-anchor='middle' font-size='10'
+      fill='#8EE7FF' font-family='monospace'>21.5°</text>
+    <circle cx='22' cy='44' r='3' fill='#8EE7FF'/>
+    <circle cx='42' cy='44' r='3' fill='#8EE7FF'/>
+  </svg>`),
+
+  // thermometer (зүгээр temp мэдрэгч)
+  thermometer: texFromSVG(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'>
+    <rect x='28' y='10' width='8' height='30' rx='4'
+      fill='none' stroke='#B3ECFF' stroke-width='3'/>
+    <circle cx='32' cy='46' r='9'
+      fill='none' stroke='#8EE7FF' stroke-width='3'/>
+    <circle cx='32' cy='46' r='5' fill='#8EE7FF'/>
+  </svg>`),
+
+  // motion sensor – 3 тойрог
+  motion: texFromSVG(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'>
+    <circle cx='32' cy='32' r='6' fill='#E8FAFF'/>
+    <circle cx='32' cy='32' r='12' fill='none' stroke='#B3ECFF' stroke-width='3'/>
+    <circle cx='32' cy='32' r='20' fill='none' stroke='#8EE7FF' stroke-width='2' opacity='.7'/>
+    <circle cx='32' cy='32' r='26' fill='none' stroke='#59D6FF' stroke-width='1.5' opacity='.45'/>
+  </svg>`),
+
+  // door sensor
+  door: texFromSVG(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'>
+    <rect x='18' y='10' width='22' height='44' rx='2'
+      fill='none' stroke='#B3ECFF' stroke-width='3'/>
+    <circle cx='36' cy='32' r='2.5' fill='#8EE7FF'/>
+    <rect x='44' y='20' width='4' height='24' rx='2'
+      fill='#8EE7FF'/>
+  </svg>`),
+
+  // coordinator / dongle
+  coordinator: texFromSVG(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'>
+    <circle cx='24' cy='24' r='10'
+      fill='none' stroke='#B3ECFF' stroke-width='3'/>
+    <path d='M18 24 h12' stroke='#8EE7FF' stroke-width='3'/>
+    <rect x='32' y='20' width='16' height='24' rx='4'
+      fill='none' stroke='#B3ECFF' stroke-width='3'/>
+    <rect x='36' y='26' width='8' height='8' rx='2'
+      fill='#8EE7FF'/>
+  </svg>`),
+
+  // камера
+  camera: texFromSVG(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'>
+    <rect x='10' y='18' width='44' height='26' rx='6'
+      fill='none' stroke='#B3ECFF' stroke-width='3'/>
+    <circle cx='32' cy='31' r='8'
+      fill='none' stroke='#8EE7FF' stroke-width='3'/>
+    <circle cx='32' cy='31' r='3' fill='#8EE7FF'/>
+  </svg>`),
+
+  // generic sensor (default)
+  sensor: texFromSVG(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'>
+    <circle cx='32' cy='32' r='10' fill='none' stroke='#B3ECFF' stroke-width='3'/>
+    <circle cx='32' cy='32' r='22' fill='none' stroke='#8EE7FF' stroke-width='2' opacity='.7'/>
+    <circle cx='32' cy='32' r='28' fill='none' stroke='#59D6FF' stroke-width='1.5' opacity='.45'/>
+  </svg>`),
+};
+const DEV_TEX = TEX;
+
+function classifyDeviceKey(d) {
+  const label = (d.label || d.name || '').toLowerCase();
+  const type  = (d.type || d.deviceClass || d.domain || '').toLowerCase();
+  const id    = (d.entityId || d.id || d.deviceKey || '').toLowerCase();
+  const src   = `${label} ${type} ${id}`;
+
+  if (/thermostat|radiator|heater/.test(src)) return 'thermostat';
+  if (/temperature|temp|thermometer/.test(src)) return 'thermometer';
+  if (/motion|pir/.test(src)) return 'motion';
+  if (/door/.test(src)) return 'door';
+  if (/window/.test(src)) return 'door';
+  if (/coordinator|dongle|bridge|gateway/.test(src)) return 'coordinator';
+  if (/camera/.test(src)) return 'camera';
+  if (/light|bulb|lamp/.test(src)) return 'light';
+  if (/socket|plug|outlet|switch/.test(src)) return 'socket';
+  if (/climate|hvac/.test(src)) return 'heater';
+  return 'sensor';
+}
+
+function texForDevice(d){
+  const key = classifyDeviceKey(d);
+  return DEV_TEX[key] || DEV_TEX.sensor;
+}
+
+function makePinSprite(d, size = 0.48) {
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: texForDevice(d),
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    opacity: 0.9,
+  }));
+  sprite.scale.set(size, size, size);
+  sprite.renderOrder = 3.2;
+
+  // 👇 Raycaster-ын click event-ийг popup руу дамжуулна
+  sprite.onClick = (ev, hit) => {
+    console.log('pin click', d.id, d.name || d.deviceKey);
+    handleDeviceClick(ev, d);   // ← шууд popup нээж байна
+  };
+
+  return sprite;
+}
+
+/* === Device pins + filter === */
+S.clearDevicePins = function(){
+  if (!S.devicePins) return;
+  for (const ch of [...S.devicePins.root.children]) ch.parent.remove(ch);
+  S.devicePins.byId.clear();
+};
+S.addDevicePin = function(d, y=2.2){
+  const p = d.pos || {};
+  const sp = makePinSprite(d, 0.55);
+  sp.position.set(Number(p.x||0), (p.y!=null ? Number(p.y) : y), Number(p.z||0));
+  S.devicePins.root.add(sp);
+  const key = d.id || d.deviceKey || Math.random().toString(36).slice(2);
+  S.devicePins.byId.set(key, { meta:d, sprite:sp });
+};
+
+function applyDeviceFilter(){
+  if (!S.devicePins) return;
+  const sensorsOn = document.getElementById('chkSensors')?.checked ?? true;
+  const socketsOn = document.getElementById('chkSockets')?.checked ?? true;
+  const heatersOn = document.getElementById('chkHeaters')?.checked ?? true;
+
+  for (const { meta, sprite } of S.devicePins.byId.values()){
+    const dom = (meta.domain || inferDomain(meta)).toLowerCase();
+    let visible = true;
+    if (/(socket|plug|outlet|switch)/.test(dom)){
+      visible = socketsOn;
+    } else if (/(heater|climate|thermostat|radiator)/.test(dom)){
+      visible = heatersOn;
+    } else {
+      visible = sensorsOn; // бусад бүхнийг sensor гэж үзье
+    }
+    sprite.visible = visible;
+  }
+}
+
+/** Төхөөрөмжөөс хамаарч чекбокс, Lights toggle-уудыг идэвхжүүлэх/нуух */
+function updateDeviceFilterAvailability(devices){
+  const has = { sensors:false, sockets:false, heaters:false, lights:false };
+
+  for (const d of devices){
+    const dom = (d.domain || inferDomain(d)).toLowerCase();
+    if (/(socket|plug|outlet|switch)/.test(dom)) has.sockets = true;
+    else if (/(heater|climate|thermostat|radiator)/.test(dom)) has.heaters = true;
+    else has.sensors = true;
+    if (/(light|bulb|lamp)/.test(dom)) has.lights = true;
+  }
+
+  const toggleLabel = (inputId, present) => {
+    const el = document.getElementById(inputId);
+    if (!el) return;
+    const lbl = el.closest('label') || el.parentElement;
+    if (!lbl) return;
+    if (present){
+      lbl.style.display = '';
+    } else {
+      lbl.style.display = 'none';
+      el.checked = false;
+    }
+  };
+
+  toggleLabel('chkSensors', has.sensors);
+  toggleLabel('chkSockets', has.sockets);
+  toggleLabel('chkHeaters', has.heaters);
+
+  const chkLights = document.getElementById('chkLights');
+  if (chkLights){
+    const lbl = chkLights.closest('label') || chkLights.parentElement;
+    if (has.lights){
+      lbl.style.display = '';
+      chkLights.disabled = false;
+      chkLights.checked = true;
+      if (S.lightsG) S.lightsG.visible = true;
+    } else {
+      lbl.style.display = 'none';
+      if (S.lightsG) S.lightsG.visible = false;
+    }
+  }
+}
+
+window.PBD = window.PBD || {};
+window.PBD.setDevices = function(devices){
+  try{
+    const H = (window._pbdMeta?.global?.ceilingHeight) ?? 2.8;
+    S.clearDevicePins();
+
+    const list = (devices || []).filter(d => !!d);
+
+    console.log('[PBD] setDevices count =', list.length);
+    if (list[0]) console.log('[PBD] sample device =', list[0]);
+
+    for (const d of list){
+      S.addDevicePin(d, H * 0.8);
+    }
+    updateDeviceFilterAvailability(list);
+    applyDeviceFilter();
+    requestAnimationFrame(() => fitToContent(1.3));
+  } catch (e) {
+    console.error('setDevices error:', e);
+  }
+};
 
 /* ───────────── INIT 3D ───────────── */
 function init3D(){
@@ -252,27 +945,100 @@ function init3D(){
   window.addEventListener('resize', ()=>requestAnimationFrame(resizeNow));
   window.addEventListener('orientationchange', ()=>setTimeout(()=>{ resizeNow(); fitToContent(1.3); }, 100));
 
-  // pick for light sprite clicks
+  S.devicePins = { root: new THREE.Group(), byId: new Map() };
+  S.scene.add(S.devicePins.root);
+
   const ray = new THREE.Raycaster(), mouse = new THREE.Vector2();
   S.renderer.domElement.addEventListener('click',(ev)=>{
     const r = S.renderer.domElement.getBoundingClientRect();
     mouse.x = ((ev.clientX - r.left) / r.width)*2 - 1;
     mouse.y = -((ev.clientY - r.top) / r.height)*2 + 1;
     ray.setFromCamera(mouse, S.cam);
-    const hit = ray.intersectObjects(S.lightsG?.children||[], true)[0];
-    if (hit?.object?.onClick) hit.object.onClick();
+    const objs = [
+      ...(S.lightsG?.children || []),
+      ...(S.devicePins?.root?.children || []),
+    ];
+    const hit = ray.intersectObjects(objs, true)[0];
+    if (hit?.object?.onClick){
+      hit.object.onClick(ev, hit);
+    } else {
+      hideDevicePopup();
+    }
   });
 
+  // devicesG future use
   S.devicesG = { root:new THREE.Group(), sockets:new THREE.Group(), heaters:new THREE.Group() };
   S.devicesG.root.add(S.devicesG.sockets, S.devicesG.heaters);
   S.scene.add(S.devicesG.root);
 }
-  function updateCompactUI(){
-  // карт маягийн жижиг талбай гэж бодсон босго (хүсвэл өөрчилж болно)
+
+function updateCompactUI(){
   const w = wrap.clientWidth;
   const h = wrap.clientHeight;
-  const isCompact = (w < 360) || (h < 260);   // жишээ босго
+  const isCompact = (w < 360) || (h < 260);
   wrap.classList.toggle('compact', isCompact);
+}
+
+/* ===== OPENINGS COLLECTOR ===== */
+function collectOpenings(pbd, segs){
+  if (Array.isArray(pbd.openings) && pbd.openings.length && pbd.openings[0].a) {
+    return pbd.openings.slice();
+  }
+
+  const out = [];
+  const avgSegLen = segs.length ? segs.reduce((s,x)=>s+x.len,0)/segs.length : 1.0;
+  const MAX_WALL_DIST = Math.max(0.60, Math.min(2.0, avgSegLen*0.25));
+  const defaultH = { door:2.05, window:1.20 };
+  const defaultSill = 0.90;
+
+  function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+  function projectToSeg(center, seg){
+    const ax=seg.a.x, az=seg.a.z, dx=seg.dir.x, dz=seg.dir.z;
+    const tRaw=(center.x-ax)*dx+(center.z-az)*dz;
+    const t=clamp(tRaw,0,seg.len);
+    const px=ax+dx*t, pz=az+dz*t;
+    const dist=Math.hypot(center.x-px, center.z-pz);
+    return { t, dist };
+  }
+
+  for (const r of (pbd.rooms||[])){
+    for (const o0 of (r.openings||[])){
+      const kind = (String(o0.kind||o0.type||'door').toLowerCase()==='window') ? 'window' : 'door';
+      const width = Math.max(0.1, parseFloat(o0.width)||0.9);
+      const center = { x:(+o0.x||0), z:-(+o0.y||0) };
+
+      let best=null;
+      for (const s of segs){
+        const pr = projectToSeg(center, s);
+        if (!best || pr.dist < best.dist) best = { seg:s, ...pr };
+      }
+      if (!best || best.dist > MAX_WALL_DIST) continue;
+
+      let offset = best.t - width/2;
+      offset = clamp(offset, 0, best.seg.len - width);
+
+      const item = {
+        type: kind,
+        a: [best.seg.a.x, best.seg.a.z],
+        b: [best.seg.b.x, best.seg.b.z],
+        offset: +offset.toFixed(3),
+        width: +width.toFixed(3)
+      };
+
+      if (kind==='door'){
+        item.height = parseFloat(o0.height)||defaultH.door;
+        const f = (o0.facing!=null) ? +o0.facing : 0;
+        item.hinge = (f>=180)?'right':'left';
+        item.swing = 90;
+      } else {
+        item.height = parseFloat(o0.height)||defaultH.window;
+        item.sill   = (o0.sill!=null)?parseFloat(o0.sill):defaultSill;
+        item.curtain = !!o0.curtain;
+      }
+      out.push(item);
+    }
+  }
+  return out;
 }
 
 /* ───────────── BUILD ───────────── */
@@ -286,7 +1052,6 @@ function buildFromPBD(pbd){
   const wallMat = new THREE.MeshBasicMaterial({ color:THEME.wall, transparent:true, opacity:0.22, blending:THREE.AdditiveBlending, depthWrite:false, side:THREE.DoubleSide, polygonOffset:true, polygonOffsetFactor:-2, polygonOffsetUnits:-2 });
   const edgeMat = new THREE.LineBasicMaterial({ color:THEME.edge, transparent:true, opacity:0.9, blending:THREE.AdditiveBlending });
 
-  // segments + openings
   const segs = dedupSegments(rooms);
   const openings = collectOpenings(pbd, segs).map(o => normalizeOpening(o));
 
@@ -296,13 +1061,16 @@ function buildFromPBD(pbd){
       const dx=p.b.x-p.a.x, dz=p.b.z-p.a.z, len=Math.hypot(dx,dz); if(len<1e-4) continue;
       const g=new THREE.PlaneGeometry(len,H), m=new THREE.Mesh(g,wallMat), ang=Math.atan2(dz,dx);
       m.rotation.y=-ang; m.position.set((p.a.x+p.b.x)/2, H/2, (p.a.z+p.b.z)/2); m.renderOrder=1.5; S.wallsG.add(m);
-      const frame = new THREE.BufferGeometry().setFromPoints([ new THREE.Vector3(-len/2,-H/2,0), new THREE.Vector3(len/2,-H/2,0), new THREE.Vector3(len/2,H/2,0), new THREE.Vector3(-len/2,H/2,0), new THREE.Vector3(-len/2,-H/2,0) ]);
+      const frame = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(-len/2,-H/2,0), new THREE.Vector3(len/2,-H/2,0),
+        new THREE.Vector3(len/2,H/2,0),  new THREE.Vector3(-len/2,H/2,0),
+        new THREE.Vector3(-len/2,-H/2,0)
+      ]);
       const line = new THREE.Line(frame, edgeMat); line.position.copy(m.position); line.rotation.copy(m.rotation); line.renderOrder=2.0; S.wallsG.add(line);
     }
     drawOpeningsOnSegment(seg, openings, H, edgeMat);
   }
 
-  // floor outlines
   for (const r of rooms){
     const pts=(r.polygon||[]).map(([x,z])=>new THREE.Vector3(x,0.01,z)); if(pts.length<2) continue;
     const pos=[]; for(let i=0;i<pts.length;i++){const p1=pts[i],p2=pts[(i+1)%pts.length]; pos.push(p1.x,p1.y,p1.z,p2.x,p2.y,p2.z);}
@@ -310,116 +1078,240 @@ function buildFromPBD(pbd){
     const ln=new THREE.LineSegments(gg, edgeMat); ln.renderOrder=2.1; S.floorG.add(ln);
   }
 
-  // labels
   addRoomLabels(rooms);
-
-  // lights
   placeRoomLights(rooms, { y: H*0.8, size: 0.55 });
 
-  // curtains
+  buildRoomCenters(pbd);
+
   if (Array.isArray(pbd.curtains) && pbd.curtains.length) drawCurtains(pbd.curtains, H, edgeMat);
 
-  // center & bbox
-  const bbox = new THREE.Box3().setFromObject(S.wallsG.children.length ? S.wallsG : S.scene);
-const c = bbox.getCenter(new THREE.Vector3());
-['wallsG','floorG','lightsG','curtainsG'].forEach(k => {
-  S[k].position.x -= c.x; S[k].position.z -= c.z;
-});
-S.labels.forEach(o => { o.position.x -= c.x; o.position.z -= c.z; });
+  const bbox = new THREE.Box3().setFromObject(
+    S.wallsG.children.length ? S.wallsG : S.scene
+  );
+  const c = bbox.getCenter(new THREE.Vector3());
 
-placeDevices(pbd, { y: H*0.8 });
+  ['wallsG', 'floorG', 'lightsG', 'curtainsG'].forEach(k => {
+    S[k].position.x -= c.x;
+    S[k].position.z -= c.z;
+  });
 
-// ⬇️  ЭНЭ МӨР НЭМБЭЛ ТОХИРОМЖТОЙ
-S.bbox = new THREE.Box3().setFromObject(S.wallsG);
+  // Room label-үүд
+  S.labels.forEach(o => {
+    o.position.x -= c.x;
+    o.position.z -= c.z;
+  });
 
-return S.bbox;
+  // DEVICE-ийн default байрлал ашигладаг ROOM_CENTER-ээ бас shift хийнэ
+  for (const rc of ROOM_CENTER.values()) {
+    rc.x -= c.x;
+    rc.z -= c.z;
+  }
+
+  S.bbox = new THREE.Box3().setFromObject(S.wallsG);
+  return S.bbox;
 }
 
-function scheduleFit(){
-  // шууд
-  requestAnimationFrame(()=>{updateCompactUI(); resizeNow(); fitToContent(1.35); });
-  // address bar шилжилт
-  setTimeout(()=>{ resizeNow(); fitToContent(1.35); }, 120);
-  setTimeout(()=>{ resizeNow(); fitToContent(1.35); }, 360);
+/* centers */
+function buildRoomCenters(pbd){
+  ROOM_CENTER.clear();
+  for (const r of (pbd.rooms || [])){
+    if (!r.id || !r.polygon?.length) continue;
+    let cx=0, cz=0;
+    for (const [x,z] of r.polygon){ cx+=x; cz+=z; }
+    cx/=r.polygon.length; cz/=r.polygon.length;
+    ROOM_CENTER.set(r.id, { x: cx, z: cz });
+  }
 }
 
-// FS орох товч дээр
-btnFS.onclick = async ()=>{
-  await enterNativeFS(wrap);
-  wrap.classList.add('fs');
-  btnFS.style.display = 'none';
-  btnExitFS.style.display = '';
-  scheduleFit();
-};
+/* XY→XZ flip */
+function flipZ(pbd){
+  const axis = String(pbd.global?.axis || 'XY').toUpperCase();
+  if (axis !== 'XY') return;
+  (pbd.rooms||[]).forEach(r=>{ r.polygon = (r.polygon||[]).map(([x,y]) => [x, -y]); });
+  (pbd.openings||[]).forEach(o=>{ if(o.a) o.a=[o.a[0],-o.a[1]]; if(o.b) o.b=[o.b[0],-o.b[1]]; });
+  (pbd.curtains||[]).forEach(c=>{ if(c.a) c.a=[c.a[0],-c.a[1]]; if(c.b) c.b=[c.b[0],-c.b[1]]; });
+}
 
-// fullscreenchange үед (системийн FS)
-document.addEventListener('fullscreenchange', ()=>{
-  const active = !!document.fullscreenElement;
-  if (active) scheduleFit();
-  else { wrap.classList.remove('fs'); btnExitFS.style.display='none'; btnFS.style.display=''; requestAnimationFrame(resizeNow); }
-});
-
-/* Segments */
+/* Segments + helpers */
 function dedupSegments(rooms){
-  const map=new Map(), put=(a,b)=>{
-    const p1=`${a.x.toFixed(3)},${a.z.toFixed(3)}`, p2=`${b.x.toFixed(3)},${b.z.toFixed(3)}`, k=p1<p2?`${p1}|${p2}`:`${p2}|${p1}`;
-    if(!map.has(k)){ const dx=b.x-a.x,dz=b.z-a.z,len=Math.hypot(dx,dz)||1e-6,dir={x:dx/len,z:dz/len}; map.set(k,{a,b,len,dir}); }
+  const map = new Map();
+  const put = (a,b)=>{
+    const p1 = `${a.x.toFixed(3)},${a.z.toFixed(3)}`;
+    const p2 = `${b.x.toFixed(3)},${b.z.toFixed(3)}`;
+    const k  = p1 < p2 ? `${p1}|${p2}` : `${p2}|${p1}`;
+    if (!map.has(k)){
+      const dx  = b.x - a.x;
+      const dz  = b.z - a.z;
+      const len = Math.hypot(dx,dz) || 1e-6;
+      const dir = { x: dx/len, z: dz/len };
+      map.set(k, { a, b, len, dir });
+    }
   };
-  for(const r of rooms){ const P=(r.polygon||[]).map(([x,z])=>({x,z})); for(let i=0;i<P.length;i++) put(P[i],P[(i+1)%P.length]); }
+  for (const r of rooms){
+    const P = (r.polygon || []).map(([x,z]) => ({ x, z }));
+    for (let i=0;i<P.length;i++){
+      put(P[i], P[(i+1) % P.length]);
+    }
+  }
   return [...map.values()];
 }
 
-/* Labels */
 function addRoomLabels(rooms){
-  for(const r of rooms){
-    if(!r.name || !r.polygon?.length) continue;
-    let cx=0, cz=0; r.polygon.forEach(([x,z])=>{cx+=x; cz+=z;}); cx/=r.polygon.length; cz/=r.polygon.length;
-    const div=document.createElement('div'); div.textContent=r.name; div.style.color=THEME.roomLabel;
-    div.style.font='700 13px/1.1 system-ui'; div.style.letterSpacing='0.3px'; div.style.textShadow='0 0 8px rgba(102,217,255,.65)';
-    const obj=new CSS2DObject(div); obj.position.set(cx,2.0,cz); obj.userData={followGroup:true};
-    S.labels.push(obj); S.scene.add(obj);
+  for (const r of rooms){
+    if (!r.name || !r.polygon?.length) continue;
+    let cx=0, cz=0;
+    for (const [x,z] of r.polygon){ cx+=x; cz+=z; }
+    cx /= r.polygon.length;
+    cz /= r.polygon.length;
+
+    const div = document.createElement('div');
+    div.textContent = r.name;
+    div.style.color = THEME.roomLabel;
+    div.style.font = '700 13px/1.1 system-ui';
+    div.style.letterSpacing = '0.3px';
+    div.style.textShadow = '0 0 8px rgba(102,217,255,.65)';
+
+    const obj = new CSS2DObject(div);
+    obj.position.set(cx,2.0,cz);
+    obj.userData = { followGroup:true };
+    S.labels.push(obj);
+    S.scene.add(obj);
   }
 }
-function setLabelsVisible(v){ S.labels.forEach(o=>o.visible=v); }
-
-/* Openings helpers */
-const EPS = 1e-3;
-function normalizeOpening(o){ const v=p=>({x:+p[0],z:+p[1]}); const a=v(o.a), b=v(o.b); const dx=b.x-a.x,dz=b.z-a.z; const len=Math.hypot(dx,dz)||EPS; const dir={x:dx/len,z:dz/len}; return {...o,a,b,len,dir}; }
-function cutByOpenings(seg, openings){
-  const spans=[[0,seg.len]];
-  for(const o of openings){ if(!sameSegment(seg,o)) continue; const s=clamp(o.offset??0,0,seg.len); const e=clamp((o.offset??0)+(o.width??0),0,seg.len); splitSpan(spans,s,e); }
-  return spans.filter(([s,e])=>e-s>EPS).map(([s,e])=>({ a:{x:seg.a.x+seg.dir.x*s, z:seg.a.z+seg.dir.z*s}, b:{x:seg.a.x+seg.dir.x*e, z:seg.a.z+seg.dir.z*e} }));
+function setLabelsVisible(v){
+  S.labels.forEach(o => o.visible = v);
 }
-function splitSpan(spans,s,e){ for(let i=spans.length-1;i>=0;i--){const [a,b]=spans[i]; if(e<=a||s>=b) continue; spans.splice(i,1); if(s-a>EPS) spans.push([a,s]); if(b-e>EPS) spans.push([e,b]);}}
-function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
-function sameSegment(s,o){ const d=(p,q)=>Math.hypot(p.x-q.x,p.z-q.z); return (d(s.a,o.a)<1e-3&&d(s.b,o.b)<1e-3)||(d(s.a,o.b)<1e-3&&d(s.b,o.a)<1e-3); }
 
-function rectFrame(w,h){ const pts=[new THREE.Vector3(-w/2,-h/2,0), new THREE.Vector3(w/2,-h/2,0), new THREE.Vector3(w/2,h/2,0), new THREE.Vector3(-w/2,h/2,0), new THREE.Vector3(-w/2,-h/2,0)]; return new THREE.BufferGeometry().setFromPoints(pts); }
+function normalizeOpening(o){
+  const v = p => ({ x:+p[0], z:+p[1] });
+  const a = v(o.a);
+  const b = v(o.b);
+  const dx = b.x - a.x;
+  const dz = b.z - a.z;
+  const len = Math.hypot(dx,dz) || EPS;
+  const dir = { x: dx/len, z: dz/len };
+  return { ...o, a, b, len, dir };
+}
+
+function cutByOpenings(seg, openings){
+  const spans = [[0, seg.len]];
+  for (const o of openings){
+    if (!sameSegment(seg,o)) continue;
+    const s = clamp(o.offset ?? 0, 0, seg.len);
+    const e = clamp((o.offset ?? 0) + (o.width ?? 0), 0, seg.len);
+    splitSpan(spans,s,e);
+  }
+  return spans
+    .filter(([s,e]) => e - s > EPS)
+    .map(([s,e]) => ({
+      a:{ x: seg.a.x + seg.dir.x * s, z: seg.a.z + seg.dir.z * s },
+      b:{ x: seg.a.x + seg.dir.x * e, z: seg.a.z + seg.dir.z * e },
+    }));
+}
+
+function splitSpan(spans,s,e){
+  for (let i = spans.length - 1; i >= 0; i--){
+    const [a,b] = spans[i];
+    if (e <= a || s >= b) continue;
+    spans.splice(i,1);
+    if (s - a > EPS) spans.push([a,s]);
+    if (b - e > EPS) spans.push([e,b]);
+  }
+}
+
+function clamp(v,a,b){
+  return Math.max(a, Math.min(b, v));
+}
+
+function sameSegment(s,o){
+  const d = (p,q) => Math.hypot(p.x - q.x, p.z - q.z);
+  return (d(s.a,o.a) < 1e-3 && d(s.b,o.b) < 1e-3) ||
+         (d(s.a,o.b) < 1e-3 && d(s.b,o.a) < 1e-3);
+}
+
+function rectFrame(w,h){
+  const pts = [
+    new THREE.Vector3(-w/2,-h/2,0),
+    new THREE.Vector3( w/2,-h/2,0),
+    new THREE.Vector3( w/2, h/2,0),
+    new THREE.Vector3(-w/2, h/2,0),
+    new THREE.Vector3(-w/2,-h/2,0),
+  ];
+  return new THREE.BufferGeometry().setFromPoints(pts);
+}
 
 function drawOpeningsOnSegment(seg, openings, H, edgeMat){
-  for(const o of openings){
-    if(!sameSegment(seg,o) || !o.width || o.width<0.05) continue;
-    const mid=(o.offset??0)+(o.width??0)/2;
-    const cx=seg.a.x+seg.dir.x*mid, cz=seg.a.z+seg.dir.z*mid, ang=Math.atan2(seg.dir.z,seg.dir.x);
-    if(o.type==='door'){
-      const dh=o.height??2.05, g=rectFrame(o.width,dh), line=new THREE.Line(g,edgeMat);
-      line.position.set(cx,dh/2,cz); line.rotation.y=-ang; line.renderOrder=2.2; S.wallsG.add(line); drawDoorSwing(cx,cz,ang,o,edgeMat);
+  for (const o of openings){
+    if (!sameSegment(seg,o) || !o.width || o.width < 0.05) continue;
+
+    const mid = (o.offset ?? 0) + (o.width ?? 0)/2;
+    const cx  = seg.a.x + seg.dir.x * mid;
+    const cz  = seg.a.z + seg.dir.z * mid;
+    const ang = Math.atan2(seg.dir.z, seg.dir.x);
+
+    if (o.type === 'door'){
+      const dh   = o.height ?? 2.05;
+      const g    = rectFrame(o.width, dh);
+      const line = new THREE.Line(g, edgeMat);
+      line.position.set(cx, dh/2, cz);
+      line.rotation.y    = -ang;
+      line.renderOrder   = 2.2;
+      S.wallsG.add(line);
+      drawDoorSwing(cx,cz,ang,o,edgeMat);
     }
-    if(o.type==='window'){
-      const sill=o.sill??0.9, wh=Math.max(0.2,o.height??1.2), g=rectFrame(o.width,wh), frame=new THREE.Line(g,edgeMat);
-      frame.position.set(cx,sill+wh/2,cz); frame.rotation.y=-ang; frame.renderOrder=2.2; S.wallsG.add(frame);
-      const glass=new THREE.Mesh(new THREE.PlaneGeometry(o.width,wh), new THREE.MeshBasicMaterial({color:0x8EE7FF,transparent:true,opacity:0.10,blending:THREE.AdditiveBlending,depthWrite:false}));
-      glass.position.set(cx,sill+wh/2,cz); glass.rotation.y=-ang; glass.renderOrder=2.15; S.wallsG.add(glass);
-      if(o.curtain) addCurtain(cx,sill,wh,cz,ang,o.width);
+
+    if (o.type === 'window'){
+      const sill = o.sill ?? 0.9;
+      const wh   = Math.max(0.2, o.height ?? 1.2);
+      const g    = rectFrame(o.width, wh);
+      const frame = new THREE.Line(g, edgeMat);
+      frame.position.set(cx, sill + wh/2, cz);
+      frame.rotation.y  = -ang;
+      frame.renderOrder = 2.2;
+      S.wallsG.add(frame);
+
+      const glass = new THREE.Mesh(
+        new THREE.PlaneGeometry(o.width, wh),
+        new THREE.MeshBasicMaterial({
+          color:0x8EE7FF,
+          transparent:true,
+          opacity:0.10,
+          blending:THREE.AdditiveBlending,
+          depthWrite:false,
+        }),
+      );
+      glass.position.set(cx, sill + wh/2, cz);
+      glass.rotation.y  = -ang;
+      glass.renderOrder = 2.15;
+      S.wallsG.add(glass);
+
+      if (o.curtain){
+        addCurtain(cx, sill, wh, cz, ang, o.width);
+      }
     }
   }
 }
+
 function drawDoorSwing(cx,cz,ang,o,edgeMat){
-  const r=(o.width??0.9), sweep=(o.swing??90)*Math.PI/180, steps=18, pts=[];
-  for(let i=0;i<=steps;i++){ const t=sweep*i/steps; pts.push(new THREE.Vector3(Math.cos(t)*r/2,0,Math.sin(t)*r/2)); }
-  const g=new THREE.BufferGeometry().setFromPoints(pts), line=new THREE.Line(g,edgeMat);
-  const hingeSign=(o.hinge==='right')?1:-1, nx=Math.cos(ang+Math.PI/2)*hingeSign, nz=Math.sin(ang+Math.PI/2)*hingeSign;
-  line.position.set(cx+nx*(r/2),0.02,cz+nz*(r/2)); line.rotation.y=-ang; line.renderOrder=2.25; S.wallsG.add(line);
+  const r     = o.width ?? 0.9;
+  const sweep = (o.swing ?? 90) * Math.PI/180;
+  const steps = 18;
+  const pts   = [];
+  for (let i=0;i<=steps;i++){
+    const t = sweep * i / steps;
+    pts.push(new THREE.Vector3(Math.cos(t)*r/2, 0, Math.sin(t)*r/2));
+  }
+  const g    = new THREE.BufferGeometry().setFromPoints(pts);
+  const line = new THREE.Line(g, edgeMat);
+
+  const hingeSign = (o.hinge === 'right') ? 1 : -1;
+  const nx = Math.cos(ang + Math.PI/2) * hingeSign;
+  const nz = Math.sin(ang + Math.PI/2) * hingeSign;
+
+  line.position.set(cx + nx*(r/2), 0.02, cz + nz*(r/2));
+  line.rotation.y  = -ang;
+  line.renderOrder = 2.25;
+  S.wallsG.add(line);
 }
 
 /* Curtains */
@@ -427,32 +1319,11 @@ function addCurtain(cx,sill,h,cz,ang,w){
   const mesh=new THREE.Mesh(new THREE.PlaneGeometry(w,h), new THREE.MeshBasicMaterial({color:0xB3ECFF,transparent:true,opacity:0.18,blending:THREE.AdditiveBlending,depthWrite:false}));
   mesh.position.set(cx,sill+h/2,cz+0.04); mesh.rotation.y=-ang; mesh.renderOrder=2.12; S.wallsG.add(mesh); S.curtainsG.add(mesh);
 }
-function drawCurtains(list,H,edgeMat){ /* (хоёрдогч – таньд ашигтай бол үлдээв, богиносгов) */ list.forEach(c=>{ if(!(c?.a&&c?.b))return; const a=new THREE.Vector3(c.a[0],0,c.a[1]), b=new THREE.Vector3(c.b[0],0,c.b[1]); const len=a.distanceTo(b); if(len<1e-4)return; const ang=Math.atan2(b.z-a.z,b.x-a.x), mid=a.clone().add(b).multiplyScalar(0.5), sill=c.sill??0.9, height=c.height??1.6, offset=c.offset??0.04; const mat=new THREE.MeshStandardMaterial({color:new THREE.Color(c.color??0x8B5A2B),transparent:true,opacity:c.opacity??0.28,roughness:0.95,metalness:0.02,side:THREE.DoubleSide}); const geo=new THREE.PlaneGeometry(len,height,80,1); const pos=geo.attributes.position, amp=c.waveAmp??0.03, freq=c.waveFreq??10; for(let i=0;i<pos.count;i++){const x=pos.getX(i),y=pos.getY(i); const u=(x+len/2)/len, v=(y+height/2)/height; const aS=0.25+0.75*v; pos.setZ(i, Math.sin(u*Math.PI*freq)*amp*aS);} pos.needsUpdate=true; geo.computeVertexNormals(); const cloth=new THREE.Mesh(geo,mat); const ny=new THREE.Vector3(Math.sin(ang),0,-Math.cos(ang)); cloth.position.copy(mid); cloth.position.y=sill+height/2; cloth.position.add(ny.clone().multiplyScalar(offset)); cloth.rotation.y=-ang; cloth.renderOrder=2.15; S.curtainsG.add(cloth); }); }
-
-/* Openings collector (өрөөн дотор тэмдэглэсэн тохиолдолд) */
-function collectOpenings(pbd,segs){
-  if (Array.isArray(pbd.openings) && pbd.openings.length && pbd.openings[0].a) return pbd.openings.slice();
-  const out=[], avgSegLen=segs.length?segs.reduce((s,x)=>s+x.len,0)/segs.length:1.0, MAX_WALL_DIST=Math.max(0.60, Math.min(2.0, avgSegLen*0.25)), defaultH={door:2.05, window:1.20}, defaultSill=0.90;
-  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
-  function projectToSeg(center, seg){ const ax=seg.a.x, az=seg.a.z, dx=seg.dir.x, dz=seg.dir.z; const tRaw=(center.x-ax)*dx+(center.z-az)*dz, t=clamp(tRaw,0,seg.len); const px=ax+dx*t, pz=az+dz*t; const dist=Math.hypot(center.x-px, center.z-pz); return {t, dist}; }
-  for(const r of (pbd.rooms||[])){
-    for(const o0 of (r.openings||[])){
-      const kind=(String(o0.kind||o0.type||'door').toLowerCase()==='window')?'window':'door';
-      const width=Math.max(0.1, parseFloat(o0.width)||0.9);
-      const center={x:(+o0.x||0), z:-(+o0.y||0)};
-      let best=null; for(const s of segs){ const pr=projectToSeg(center,s); if(!best || pr.dist<best.dist) best={seg:s, ...pr}; }
-      if(!best || best.dist>MAX_WALL_DIST) continue;
-      let offset=best.t - width/2; offset = clamp(offset, 0, best.seg.len - width);
-      const item={ type:kind, a:[best.seg.a.x,best.seg.a.z], b:[best.seg.b.x,best.seg.b.z], offset:+offset.toFixed(3), width:+width.toFixed(3) };
-      if(kind==='door'){ item.height=parseFloat(o0.height)||defaultH.door; const f=(o0.facing!=null)?+o0.facing:0; item.hinge=(f>=180)?'right':'left'; item.swing=90; }
-      else { item.height=parseFloat(o0.height)||defaultH.window; item.sill=(o0.sill!=null)?parseFloat(o0.sill):defaultSill; item.curtain=!!o0.curtain; }
-      out.push(item);
-    }
-  }
-  return out;
+function drawCurtains(list,H,edgeMat){
+  // одоогоор тусад нь юуг ч зурж байхгүй, curtain-ууд window-оос дуудаж байна
 }
 
-/* Lights */
+/* Lights (UI + visuals) */
 function updateLightVisual(li){
   const intensity = li.on ? (li.value/100) : 0;
   const op = li.on ? S.lightBaseOpacity*(0.25+0.75*intensity) : LIGHT_DIM_OPACITY;
@@ -471,15 +1342,16 @@ function placeRoomLights(rooms, { y=2.0, size=0.5 } = {}){
       <line x1='10' y1='10' x2='18' y2='18'/><line x1='46' y1='46' x2='54' y2='54'/>
       <line x1='10' y1='54' x2='18' y2='46'/><line x1='46' y1='18' x2='54' y2='10'/>
     </g></svg>`);
-  const tex = new THREE.TextureLoader().load(`data:image/svg+xml;utf8,${svg}`);
+  const tex1 = new THREE.TextureLoader().load(`data:image/svg+xml;utf8,${svg}`);
   S.lightSprites.length=0;
 
   let idx=0;
+
   for(const r of rooms){
     if(!r.polygon?.length) continue;
     let cx=0,cz=0; for(const [x,z] of r.polygon){ cx+=x; cz+=z; } cx/=r.polygon.length; cz/=r.polygon.length;
 
-    const mat = new THREE.SpriteMaterial({ map:tex, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, opacity:S.lightBaseOpacity*0.6 });
+    const mat = new THREE.SpriteMaterial({ map:tex1, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, opacity:S.lightBaseOpacity*0.6 });
     const sp = new THREE.Sprite(mat); sp.position.set(cx,y,cz); sp.scale.set(size,size,size); sp.renderOrder=3; S.lightsG.add(sp);
 
     const li = { id:`L${++idx}`, room:r.name||'Room', sprite:sp, baseSize:size, value:60, on:true };
@@ -514,212 +1386,112 @@ function animate(){ requestAnimationFrame(animate); S.controls.update(); S.rende
 
 /* ───────────── UI hooks ───────────── */
 function hookUI(){
-  // Visibility toggles
   document.getElementById('chkFloor').onchange   = e => S.floorG.visible   = e.target.checked;
   document.getElementById('chkWalls').onchange   = e => S.wallsG.visible   = e.target.checked;
-  document.getElementById('chkLights').onchange  = e => { S.lightsG.visible = e.target.checked; const dis=!e.target.checked; document.querySelectorAll('#lightsList input').forEach(el=>el.disabled=dis); };
+  document.getElementById('chkLights').onchange  = e => { if(S.lightsG) S.lightsG.visible = e.target.checked; const dis=!e.target.checked; document.querySelectorAll('#lightsList input').forEach(el=>el.disabled=dis); };
   const chkCurt=document.getElementById('chkCurtains'); const hasCurt=S.curtainsG.children.length>0;
   chkCurt.checked=hasCurt; chkCurt.disabled=!hasCurt; chkCurt.onchange = e => S.curtainsG.visible = e.target.checked;
   document.getElementById('chkLabels').onchange  = e => setLabelsVisible(e.target.checked);
 
-  // Lights panel
   const panel = document.getElementById('lightsPanel');
   document.getElementById('btnLightsCfg').onclick = ()=> panel.style.display = (panel.style.display==='block')?'none':'block';
   document.getElementById('btnCloseLights').onclick = ()=> panel.style.display='none';
 
-  // Fit
   document.getElementById('btnFit').onclick = ()=>fitToContent(1.25);
 
-  // Fullscreen
   const btnFS=document.getElementById('btnFS'), btnExit=document.getElementById('btnExitFS');
   const enterNativeFS=el=> (el.requestFullscreen||el.webkitRequestFullscreen||el.msRequestFullscreen)?.call(el).catch(()=>{});
   const exitNativeFS =()=> (document.exitFullscreen||document.webkitExitFullscreen||document.msExitFullscreen)?.call(document).catch(()=>{});
   btnFS.onclick = async ()=>{ await enterNativeFS(wrap); wrap.classList.add('fs'); btnFS.style.display='none'; btnExit.style.display=''; requestAnimationFrame(()=>{ resizeNow(); fitToContent(1.35); }); };
   btnExit.onclick = async ()=>{ await exitNativeFS(); wrap.classList.remove('fs'); btnExit.style.display='none'; btnFS.style.display=''; requestAnimationFrame(resizeNow); };
   ['fullscreenchange','webkitfullscreenchange','MSFullscreenChange'].forEach(ev=>{
-    document.addEventListener(ev, ()=>{ const active=!!(document.fullscreenElement||document.webkitFullscreenElement); if(!active && wrap.classList.contains('fs')){ wrap.classList.remove('fs'); btnExit.style.display='none'; btnFS.style.display=''; requestAnimationFrame(resizeNow); }});
+    document.addEventListener(ev, ()=>{
+      const active=!!(document.fullscreenElement||document.webkitFullscreenElement);
+      if(!active && wrap.classList.contains('fs')){
+        wrap.classList.remove('fs'); btnExit.style.display='none'; btnFS.style.display=''; requestAnimationFrame(resizeNow);
+      }
+    });
   });
+
+  // device filter checkboxes
+  const bind = id => {
+    const el = document.getElementById(id);
+    if (el) el.onchange = () => applyDeviceFilter();
+  };
+  bind('chkSensors');
+  bind('chkSockets');
+  bind('chkHeaters');
 }
 
-document.getElementById('btnDevices').onclick = ()=>{
-  const p = document.getElementById('devicesPanel');
-  p.style.display = (p.style.display==='none' || !p.style.display) ? 'block' : 'none';
+// document.getElementById('btnDevices').onclick = ()=>{
+//   const p = document.getElementById('devicesPanel');
+//   p.style.display = (p.style.display==='none' || !p.style.display) ? 'block' : 'none';
+// };
+// document.getElementById('btnCloseDevices').onclick = ()=>{ document.getElementById('devicesPanel').style.display='none'; };
+// document.querySelectorAll('#devicesPanel .tab').forEach(btn=>{
+//   btn.onclick = ()=>{ document.querySelectorAll('#devicesPanel .tab').forEach(b=>b.classList.remove('on'));
+//     btn.classList.add('on'); /* buildDevicesPanel(btn.dataset.tab); */ };
+// });
+
+/* ===== START PIPELINE ===== */
+window.start = async () => {
+  try{
+    const init = getInit();
+    const baseUrl = init.baseUrl || "";
+    const siteId  = init.siteId  || "";
+    const jwt     = init.jwt     || "";
+    const fid     = init.floorId || "";
+
+    const loadPBD = async () => {
+      if (!baseUrl || !siteId || !jwt) {
+        return fetch('./pbd.json').then(r => r.json());
+      }
+      const auth = /^Bearer /.test(jwt) ? jwt : `Bearer ${jwt}`;
+      const latestUrl = `${baseUrl}/api/pbd/latest?siteId=${encodeURIComponent(siteId)}${fid ? `&floorId=${encodeURIComponent(fid)}` : ""}`;
+      let latestRes = await fetch(latestUrl, { headers: { Authorization: auth }, cache: 'no-store' });
+      if (!latestRes.ok) {
+        const legacy = `${baseUrl}/api/site/${siteId}/pbd/latest`;
+        latestRes = await fetch(legacy, { headers: { Authorization: auth }, cache: 'no-store' });
+        if (!latestRes.ok) throw new Error('latest ' + latestRes.status);
+      }
+      const latest = await latestRes.json();
+      const metaUrl = latest.url || latest.file?.url || latest.data?.url || latest.result?.url;
+      if (!metaUrl) throw new Error('No PBD URL in latest payload');
+      const abs = /^https?:\/\//i.test(metaUrl) ? metaUrl : `${baseUrl}${metaUrl}`;
+      const bust = (latest.version || "") + "-" + Date.now();
+      const pbdRes = await fetch(`${abs}${abs.includes('?') ? '&' : '?'}_=${bust}`, { headers: { Authorization: auth }, cache: 'no-store' });
+      if (!pbdRes.ok) throw new Error('pbd ' + pbdRes.status);
+      return pbdRes.json();
+    };
+
+    const pbd = await loadPBD();
+
+    window._pbdMeta = pbd;
+    flipZ(pbd);
+    init3D();
+    updateCompactUI();
+    S.bbox = buildFromPBD(pbd);
+    hookUI();
+
+    const chkLabels = document.getElementById('chkLabels');
+    setLabelsVisible(!!chkLabels.checked);
+
+    const apiDevices = await loadDevices();
+    console.log('[PBD] raw devices from API:', apiDevices);
+
+    const devices = enrichDevicesWithRoomCenter(apiDevices);
+    console.log('[PBD] devices after enrich:', devices);
+
+    window.PBD.setDevices(devices);
+
+    loading.remove();
+    fitToContent(1.25);
+    animate();
+
+  }catch(e){
+    loading.textContent = 'ERR: ' + (e?.message || e);
+  }
 };
-document.getElementById('btnCloseDevices').onclick = ()=>{
-  document.getElementById('devicesPanel').style.display='none';
-};
-document.getElementById('chkSockets').onchange = e => S.devicesG.sockets.visible = e.target.checked;
-document.getElementById('chkHeaters').onchange = e => S.devicesG.heaters.visible = e.target.checked;
-
-// таб солих
-document.querySelectorAll('#devicesPanel .tab').forEach(btn=>{
-  btn.onclick = ()=>{ document.querySelectorAll('#devicesPanel .tab').forEach(b=>b.classList.remove('on'));
-    btn.classList.add('on'); buildDevicesPanel(btn.dataset.tab); };
-});
-
-function texFromSVG(svg){
-  return new THREE.TextureLoader().load(`data:image/svg+xml;utf8,${encodeURIComponent(svg)}`);
-}
-
-const TEX = {
-  light:  texFromSVG(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'>
-    <defs><radialGradient id='g' cx='0.5' cy='0.5' r='0.5'>
-      <stop offset='0' stop-color='#fff'/><stop offset='1' stop-color='#59D6FF' stop-opacity='0'/></radialGradient></defs>
-    <circle cx='32' cy='32' r='10' fill='#E8FAFF'/><circle cx='32' cy='32' r='22' fill='url(#g)'/>
-    <g stroke='#B3ECFF' stroke-width='3' stroke-linecap='round' opacity='0.95'>
-      <line x1='32' y1='4' x2='32' y2='14'/><line x1='32' y1='50' x2='32' y2='60'/>
-      <line x1='4' y1='32' x2='14' y2='32'/><line x1='50' y1='32' x2='60' y2='32'/>
-      <line x1='10' y1='10' x2='18' y2='18'/><line x1='46' y1='46' x2='54' y2='54'/>
-      <line x1='10' y1='54' x2='18' y2='46'/><line x1='46' y1='18' x2='54' y2='10'/>
-    </g></svg>`),
-
-  socket: texFromSVG(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'>
-    <rect x='8' y='12' width='48' height='40' rx='8' fill='none' stroke='#B3ECFF' stroke-width='3'/>
-    <circle cx='24' cy='32' r='5' fill='#B3ECFF'/><circle cx='40' cy='32' r='5' fill='#B3ECFF'/>
-  </svg>`),
-
-  heater: texFromSVG(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'>
-    <rect x='8' y='16' width='48' height='28' rx='4' fill='none' stroke='#B3ECFF' stroke-width='3'/>
-    <g stroke='#8EE7FF' stroke-width='3'>
-      <path d='M16 50 q4-8 0-16' fill='none'/><path d='M28 50 q4-8 0-16' fill='none'/>
-      <path d='M40 50 q4-8 0-16' fill='none'/><path d='M52 50 q4-8 0-16' fill='none'/>
-    </g>
-  </svg>`)
-};
-S.devices = { lights:S.lightSprites, sockets:[], heaters:[] }; // нэг газар цэгцэлнэ
-
-function roomCenter(r){
-  let cx=0, cz=0; r.polygon.forEach(([x,z])=>{cx+=x; cz+=z;});
-  return { x: cx/r.polygon.length, z: cz/r.polygon.length };
-}
-
-function makeSprite(tex, size=0.5){
-  return new THREE.Sprite(new THREE.SpriteMaterial({
-    map:tex, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, opacity:0.9
-  }));
-}
-
-/** pbd.devices байхгүй бол өрөө тус бүрт 1 socket + 1 heater автоматаар тавина. */
-function placeDevices(pbd, { y=2.0 }={}){
-  const rooms = pbd.rooms||[];
-
-  // 1) data
-  const data = Array.isArray(pbd.devices) ? pbd.devices.slice() : [];
-  if (!data.length){
-    for (const r of rooms){
-      const c = roomCenter(r);
-      data.push({ type:'socket', room:r.name, x:c.x-0.6, z:c.z });
-      data.push({ type:'heater', room:r.name, x:c.x+0.6, z:c.z });
-    }
-  }
-
-  // 2) spawn
-  for (const d of data){
-    const kind = (d.type||'').toLowerCase();
-    const size = d.size || 0.55;
-    const sp = makeSprite(kind==='socket'?TEX.socket:TEX.heater, size);
-    sp.position.set(d.x ?? 0, y, d.z ?? 0);
-    sp.scale.set(size,size,size);
-    sp.renderOrder = 3.1;
-
-    if (kind==='socket'){
-      S.devicesG.sockets.add(sp);
-      const item = { id:`S${S.devices.sockets.length+1}`, room:d.room||'room', sprite:sp, on: true };
-      sp.onClick = ()=>{ item.on=!item.on; updateSocketVisual(item); syncRow(item); };
-      S.devices.sockets.push(item);
-      updateSocketVisual(item);
-    }else if (kind==='heater'){
-      S.devicesG.heaters.add(sp);
-      const item = { id:`H${S.devices.heaters.length+1}`, room:d.room||'room', sprite:sp, on:true, set:22 };
-      sp.onClick = ()=>{ item.on=!item.on; updateHeaterVisual(item); syncRow(item); };
-      S.devices.heaters.push(item);
-      updateHeaterVisual(item);
-    }
-  }
-
-  buildDevicesPanel('lights'); // нээхэд шууд гэрэл таб
-}
-
-function updateSocketVisual(it){
-  it.sprite.material.opacity = it.on ? 0.9 : 0.15;
-  it.sprite.material.color.setHex(it.on ? 0xffffff : 0x5a86a0);
-}
-function updateHeaterVisual(it){
-  it.sprite.material.opacity = it.on ? 0.9 : 0.15;
-  it.sprite.material.color.setHex(it.on ? 0xffffff : 0x5a86a0);
-}
-function syncRow(it){ // 3D дээр дарсан үед UI checkbox/slider-тэй синк
-  const row = document.querySelector(`[data-dev="${it.id}"]`);
-  if (!row) return;
-  const chk = row.querySelector('input[type="checkbox"]');
-  if (chk) chk.checked = !!it.on;
-  const range = row.querySelector('input[type="range"]');
-  const out   = row.querySelector('.val');
-  if (range && out){ range.value = it.set; out.textContent = `${it.set}°`; }
-}
-
-function buildDevicesPanel(tab='lights'){
-  const list = document.getElementById('devList'); if (!list) return;
-  list.innerHTML = '';
-
-  if (tab === 'lights'){
-    for (const L of S.devices.lights){
-      const row = document.createElement('div');
-      row.dataset.dev = L.id;
-      row.style.cssText = 'display:flex;align-items:center;gap:6px;margin:6px 0;';
-      row.innerHTML = `
-        <input type="checkbox" ${L.on?'checked':''}>
-        <span style="width:90px;opacity:.9">${L.room}</span>
-        <input type="range" min="0" max="100" value="${L.value}" style="flex:1">
-        <span class="val" style="width:38px;text-align:right">${L.value}%</span>
-      `;
-      const [chk, , range, val] = row.querySelectorAll('input,span');
-      chk.onchange  = ()=>{ L.on = chk.checked; updateLightVisual(L); };
-      const apply=()=>{ L.value=range.value|0; val.textContent=`${L.value}%`; updateLightVisual(L); };
-      range.addEventListener('input',apply,{passive:true}); range.addEventListener('change',apply);
-      list.appendChild(row);
-    }
-    return;
-  }
-
-  if (tab === 'sockets'){
-    for (const SCK of S.devices.sockets){
-      const row = document.createElement('div');
-      row.dataset.dev = SCK.id;
-      row.style.cssText = 'display:flex;align-items:center;gap:6px;margin:6px 0;';
-      row.innerHTML = `
-        <input type="checkbox" ${SCK.on?'checked':''}>
-        <span style="flex:1;opacity:.9">${SCK.room}</span>
-        <span style="width:38px;text-align:right">${SCK.on?'ON':'OFF'}</span>
-      `;
-      const chk = row.querySelector('input[type="checkbox"]');
-      const lab = row.querySelector('span:last-child');
-      chk.onchange = ()=>{ SCK.on = chk.checked; lab.textContent = SCK.on?'ON':'OFF'; updateSocketVisual(SCK); };
-      list.appendChild(row);
-    }
-    return;
-  }
-
-  if (tab === 'heaters'){
-    for (const H of S.devices.heaters){
-      const row = document.createElement('div');
-      row.dataset.dev = H.id;
-      row.style.cssText = 'display:flex;align-items:center;gap:6px;margin:6px 0;';
-      row.innerHTML = `
-        <input type="checkbox" ${H.on?'checked':''}>
-        <span style="width:90px;opacity:.9">${H.room}</span>
-        <input type="range" min="15" max="28" value="${H.set}" style="flex:1">
-        <span class="val" style="width:38px;text-align:right">${H.set}°</span>
-      `;
-      const [chk, , range, val] = row.querySelectorAll('input,span');
-      chk.onchange = ()=>{ H.on = chk.checked; updateHeaterVisual(H); };
-      const apply = ()=>{ H.set = range.value|0; val.textContent = `${H.set}°`; /* энд API дуудлага хийж болно */ };
-      range.addEventListener('input',apply,{passive:true}); range.addEventListener('change',apply);
-      list.appendChild(row);
-    }
-  }
-}
-
 </script>
 </body>
 </html>

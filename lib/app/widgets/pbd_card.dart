@@ -2,18 +2,30 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
+class PbdCardController {
+  void Function(List<Map<String, dynamic>>)? setDevices;
+  void Function(String deviceId, String action, dynamic value)? sendCmdToJs;
+}
+
 class PbdCard extends StatefulWidget {
   final String baseUrl;
   final String siteId;
   final String jwt;
   final double height;
+  final String? floorId; 
+  final List<Map<String, dynamic>> devices;
+
+  final PbdCardController? controller;
 
   const PbdCard({
     super.key,
     required this.baseUrl,
     required this.siteId,
     required this.jwt,
+    this.floorId,     
     this.height = 300,
+    this.devices = const [],
+    this.controller,
   });
 
   @override
@@ -42,6 +54,7 @@ class _PbdCardState extends State<PbdCard> with WidgetsBindingObserver {
             final payload = jsonEncode({
               'baseUrl': widget.baseUrl,
               'siteId': widget.siteId,
+              'floorId': widget.floorId ?? '',
               'jwt': widget.jwt,
             });
             try {
@@ -165,6 +178,34 @@ class _PbdCardState extends State<PbdCard> with WidgetsBindingObserver {
       ],
     );
   }
+  Future<void> _injectInit() async {
+    final payload = jsonEncode({
+      'baseUrl': widget.baseUrl,
+      'siteId' : widget.siteId,
+      'floorId': widget.floorId ?? '',
+      'jwt'    : widget.jwt,
+    });
+    await _ctrl.runJavaScript(
+      'window.INIT=$payload; window.start && window.start();'
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant PbdCard old) {
+    super.didUpdateWidget(old);
+    if (old.floorId != widget.floorId) {
+      // HTML талд бэлдсэн switch функцыг эхлээд оролдоно,
+      // байхгүй бол бүрэн reload (санах ой бага).
+      _ctrl.runJavaScript(
+        'window.switchFloor && window.switchFloor(${jsonEncode(widget.floorId ?? "")});'
+      ).catchError((_) async {
+        await _injectInit();
+        await _ctrl.reload();
+      });
+    }
+  }
+
+
 }
 
 class _CircleIconButton extends StatelessWidget {

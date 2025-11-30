@@ -219,6 +219,7 @@ class ApiClient {
     }
   }
 
+
   Future<Response<dynamic>> _retry(RequestOptions req) {
     final opts = Options(
       method: req.method,
@@ -236,5 +237,86 @@ class ApiClient {
       queryParameters: req.queryParameters,
       options: opts,
     );
+  }
+
+  
+}
+extension FloorApi on ApiClient {
+  Future<List<Map<String, dynamic>>> getFloors(String siteId) async {
+    // raw string аваад өөрсдөө задлая – формат ямар ч байсан барина
+    final resp = await get<String>(
+      '/api/floors',
+      query: {'siteId': siteId},
+      withAuth: true,
+    );
+
+    final dynamic root = jsonDecode(resp.data ?? '{}');
+
+    // Түгээмэл wrapper-үүдийг тайлж items-г олно
+    dynamic items;
+    if (root is Map<String, dynamic>) {
+      items = root['items'] ?? root['data'] ?? root['result'] ?? root['floors'];
+      // Хэрвээ сервер шууд массив биш, нэг Map буцаасан бол массив болгож өгнө
+      if (items == null) items = root;
+    } else {
+      items = root;
+    }
+
+    if (items is List) {
+      return items.cast<Map<String, dynamic>>();
+    } else if (items is Map<String, dynamic>) {
+      return [items]; // ганц обьект ирсэн тохиолдолд
+    } else {
+      return const [];
+    }
+  }
+}
+
+// ---- Devices API (site + floor → devices, device → command) ----
+extension DeviceApi on ApiClient {
+  /// Тухайн site + floor дээрх төхөөрөмжүүдийг татна.
+  /// Server { ok, devices:[...] } эсвэл { items:[...] } / шууд массив
+  Future<List<Map<String, dynamic>>> getDevicesByFloor(
+    String siteId,
+    String floorId,
+  ) async {
+    final resp = await get<String>(
+      '/api/sites/$siteId/floors/$floorId/devices',
+      withAuth: true,
+    );
+
+    final dynamic root = jsonDecode(resp.data ?? '[]');
+
+    dynamic items;
+    if (root is Map<String, dynamic>) {
+      items = root['devices'] ?? root['items'] ?? root['data'] ?? root['result'];
+      items ??= (root['ok'] == true && root['devices'] is List) ? root['devices'] : null;
+    } else {
+      items = root;
+    }
+
+    if (items is List) return items.cast<Map<String, dynamic>>();
+    if (items is Map<String, dynamic>) return [items];
+    return const [];
+  }
+
+  /// 3D дээрээс дарж ON/OFF гэх мэт команд өгөх.
+  /// action: 'on' | 'off' | 'toggle' | 'set_brightness' | ...
+  /// value: нэмэлт утга (ж. set_brightness=70)
+  Future<Map<String, dynamic>> sendDeviceCommand({
+    required String deviceId,
+    required String action,
+    dynamic value,
+  }) async {
+    final body = {'action': action, if (value != null) 'value': value};
+
+    final resp = await post<String>(
+      '/api/devices/$deviceId/command',
+      body: body,
+      withAuth: true,
+    );
+
+    final raw = resp.data ?? '{}';
+    return jsonDecode(raw) as Map<String, dynamic>;
   }
 }

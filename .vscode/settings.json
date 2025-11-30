@@ -1,3 +1,4 @@
 {
-    "cmake.sourceDirectory": "/Users/baigalimaa/Projects/smart_home/linux"
+    "cmake.sourceDirectory": "/Users/baigalimaa/Projects/smart_home/linux",
+    "java.configuration.updateBuildConfiguration": "interactive"
 }
