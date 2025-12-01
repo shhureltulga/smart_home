@@ -277,7 +277,7 @@ extension FloorApi on ApiClient {
     if (root is Map<String, dynamic>) {
       items = root['items'] ?? root['data'] ?? root['result'] ?? root['floors'];
       // Хэрвээ сервер шууд массив биш, нэг Map буцаасан бол массив болгож өгнө
-      if (items == null) items = root;
+      items ??= root;
     } else {
       items = root;
     }

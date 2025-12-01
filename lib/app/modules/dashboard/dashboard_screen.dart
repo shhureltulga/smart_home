@@ -11,7 +11,6 @@ import 'package:smart_home/app/modules/shell/root_scaffold.dart';
 import 'package:smart_home/app/widgets/pbd_card.dart';
 import 'package:smart_home/app/widgets/pbd_floor_selector.dart';
 import 'package:smart_home/app/data/api_client.dart'; // ApiClient.I
-import 'package:smart_home/app/widgets/device_cards.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -277,7 +276,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 class _DevicesSheet extends StatefulWidget {
   final List<Map<String, dynamic>> devices;
 
-  const _DevicesSheet({super.key, required this.devices});
+  const _DevicesSheet({required this.devices});
 
   @override
   State<_DevicesSheet> createState() => _DevicesSheetState();
@@ -465,7 +464,6 @@ class _DevicesListSliver extends StatelessWidget {
   final List<Map<String, dynamic>> devices;
 
   const _DevicesListSliver({
-    super.key,
     required this.devices,
   });
 
