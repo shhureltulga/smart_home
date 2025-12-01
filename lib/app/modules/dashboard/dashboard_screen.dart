@@ -11,9 +11,7 @@ import 'package:smart_home/app/modules/shell/root_scaffold.dart';
 import 'package:smart_home/app/widgets/pbd_card.dart';
 import 'package:smart_home/app/widgets/pbd_floor_selector.dart';
 import 'package:smart_home/app/data/api_client.dart'; // ApiClient.I
-
-// 🔌 Картын widget-ууд
-import 'package:smart_home/app/widgets/device_sections/climate_section.dart';
+import 'package:smart_home/app/widgets/device_cards.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -28,39 +26,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<SiteOverview>? _futureOverview;
   Timer? _ticker;
 
-  // -------- Floors + devices --------
+  // Floors
   bool _loadingFloors = true;
-  String? _floorsErr;
+  String? _floorsError;
   List<FloorItem> _floors = const [];
   String? _selectedFloorId;
 
-  /// Энэ давхрын төхөөрөмжүүд (API → getDevicesByFloor)
+  // Devices (энэ давхрынх)
   List<Map<String, dynamic>> _devices = [];
 
-  /// Device.id → LatestSensor map
-  Map<String, Map<String, dynamic>> _latestByDeviceId = {};
-
-  // 3D viewer controller
+  // 3D PBD controller
   final PbdCardController _pbdCtrl = PbdCardController();
 
   @override
   void initState() {
     super.initState();
     Future.microtask(() async {
-      _siteId =
-          await SecureStore.instance.read(SecureKeys.selectedSiteId);
+      _siteId = await SecureStore.instance.read(SecureKeys.selectedSiteId);
       _jwt = await SecureStore.instance.read(SecureKeys.accessToken);
 
-      if (!mounted) return;
-      setState(() {});
+      if (_siteId != null && _siteId!.isNotEmpty) {
+        _refetchOverview();
+        _loadFloors();
+      }
 
-      _refetchOverview();
-      _loadFloors();
-
-      // ⏱ 5 сек тутам overview + devices дахин татна
+      if (mounted) setState(() {});
       _ticker?.cancel();
       _ticker = Timer.periodic(const Duration(seconds: 5), (_) {
-        _refetchOverview();
         _loadDevices();
       });
     });
@@ -72,48 +64,47 @@ class _DashboardScreenState extends State<DashboardScreen> {
     super.dispose();
   }
 
-  // -------- Site overview --------
   void _refetchOverview() {
-    if (!mounted || _siteId == null || _siteId!.isEmpty) return;
+    final siteId = _siteId;
+    if (!mounted || siteId == null || siteId.isEmpty) return;
     setState(() {
-      _futureOverview = Get.find<SitesService>()
-          .fetchOverview(_siteId!)
-          .then((ov) {
+      _futureOverview =
+          Get.find<SitesService>().fetchOverview(siteId).then((ov) {
         if (mounted) {
-          setState(() {
-            _siteTitle = 'Dashboard • ${ov.siteName}';
-          });
+          _siteTitle = 'Dashboard • ${ov.siteName}';
         }
         return ov;
       });
     });
   }
 
-  // -------- Floors + devices --------
   Future<void> _loadFloors() async {
-    if (_siteId == null) return;
+    final siteId = _siteId;
+    if (siteId == null || siteId.isEmpty) return;
     try {
       setState(() {
         _loadingFloors = true;
-        _floorsErr = null;
+        _floorsError = null;
       });
 
-      final list = await ApiClient.I.getFloors(_siteId!);
+      final list = await ApiClient.I.getFloors(siteId); // [{id,name,order}]
       final items = list
-          .map<FloorItem>((m) => FloorItem(
-                id: m['id'] as String,
-                name: (m['name'] as String?)?.trim().isNotEmpty == true
-                    ? m['name'] as String
-                    : 'Floor',
-                order: (m['order'] as num?)?.toInt() ?? 0,
-              ))
+          .map<FloorItem>(
+            (m) => FloorItem(
+              id: m['id'] as String,
+              name: (m['name'] as String?)?.trim().isNotEmpty == true
+                  ? m['name'] as String
+                  : 'Floor',
+              order: (m['order'] as num?)?.toInt() ?? 0,
+            ),
+          )
           .toList()
         ..sort((a, b) => a.order.compareTo(b.order));
 
       setState(() {
         _floors = items;
         _selectedFloorId ??=
-            items.isNotEmpty ? items.first.id : null;
+            items.isNotEmpty ? items.first.id : null; // default floor
         _loadingFloors = false;
       });
 
@@ -121,36 +112,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
     } catch (e) {
       setState(() {
         _loadingFloors = false;
-        _floorsErr = e.toString();
+        _floorsError = e.toString();
       });
       debugPrint('getFloors err: $e');
     }
   }
 
   Future<void> _loadDevices() async {
-    if (_siteId == null || _selectedFloorId == null) return;
+    final siteId = _siteId;
+    final fid = _selectedFloorId;
+    if (!mounted || siteId == null || siteId.isEmpty || fid == null) return;
 
     try {
-      final list =
-          await ApiClient.I.getDevicesByFloor(_siteId!, _selectedFloorId!);
-
-      // Backend-аас device бүр дээр LatestSensor-г `latest` field-ээр
-      // явуулдаг гэж үзэж байна. (хэрвээ үгүй бол backend дээрээ
-      // join хийж өгөх хэрэгтэй.)
-      final latestMap = <String, Map<String, dynamic>>{};
-      for (final d in list) {
-        final id = d['id'] as String?;
-        final latest = d['latest'];
-        if (id != null && latest is Map<String, dynamic>) {
-          latestMap[id] = latest;
-        }
-      }
-
+      final list = await ApiClient.I.getDevicesByFloor(siteId, fid);
       setState(() {
-        _devices = List<Map<String, dynamic>>.from(list);
-        _latestByDeviceId = latestMap;
+        _devices = list;
       });
 
+      // 3D дээрх pin-үүдийг шинэчилнэ
       _pbdCtrl.setDevices?.call(_devices);
     } catch (e) {
       debugPrint('getDevicesByFloor err: $e');
@@ -183,7 +162,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             tooltip: 'Дахин татах',
             onPressed: () {
               _refetchOverview();
-              _loadDevices();
+              _loadFloors();
             },
             icon: const Icon(Icons.refresh),
           ),
@@ -201,47 +180,90 @@ class _DashboardScreenState extends State<DashboardScreen> {
               builder: (context, snap) {
                 if (snap.connectionState == ConnectionState.waiting &&
                     snap.data == null) {
-                  return const Center(
-                      child: CircularProgressIndicator());
+                  return const Center(child: CircularProgressIndicator());
                 }
                 if (snap.hasError) {
                   return _ErrorView(
                     message: '${snap.error}',
                     onRetry: () {
                       _refetchOverview();
-                      _loadDevices();
+                      _loadFloors();
                     },
                   );
                 }
 
                 final ov = snap.data!;
-
-                // Ар талд overview + 3D, урд талд draggable devices sheet
                 return Stack(
                   children: [
                     RefreshIndicator(
                       onRefresh: () async {
                         _refetchOverview();
-                        await _loadDevices();
+                        await _loadFloors();
                       },
-                      child: _OverviewBody(
-                        ov: ov,
-                        siteId: _siteId!,
-                        jwt: _jwt,
-                        floors: _floors,
-                        selectedFloorId: _selectedFloorId,
-                        loadingFloors: _loadingFloors,
-                        floorsErr: _floorsErr,
-                        pbdCtrl: _pbdCtrl,
-                        devices: _devices,
-                        onReloadFloors: _loadFloors,
-                        onFloorChanged: _onFloorChanged,
+                      child: ListView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.all(16),
+                        children: [
+                          const SizedBox(height: 12),
+                          _DashboardHeader(
+                            outsideTemp: ov.weather?.tempC ?? 0,
+                            humidity: ov.weather?.humidity ?? 0,
+                            weatherTemp: (ov.weather?.tempC ?? 0).round(),
+                            windSpeed:
+                                (ov.weather?.windSpeedMs ?? 0).round(),
+                            rainProb:
+                                (ov.weather?.rainProb ?? 0).round(),
+                          ),
+                          const SizedBox(height: 12),
+
+                          if (_jwt != null) ...[
+                            if (_loadingFloors) ...[
+                              const LinearProgressIndicator(minHeight: 2),
+                              const SizedBox(height: 8),
+                            ] else if (_floorsError != null) ...[
+                              Text(
+                                'Алдаа: $_floorsError',
+                                style: const TextStyle(
+                                    color: Colors.redAccent),
+                              ),
+                              TextButton(
+                                onPressed: _loadFloors,
+                                child: const Text('Дахин ачаалах'),
+                              ),
+                              const SizedBox(height: 8),
+                            ] else ...[
+                              if (_floors.isNotEmpty)
+                                PbdFloorSelector(
+                                  floors: _floors,
+                                  selectedFloorId: _selectedFloorId,
+                                  onChanged: _onFloorChanged,
+                                ),
+                              const SizedBox(height: 8),
+
+                              if (_selectedFloorId != null)
+                                PbdCard(
+                                  key: ValueKey(
+                                      'pbd-${_selectedFloorId!}'),
+                                  baseUrl: "https://api.habea.mn",
+                                  siteId: _siteId!,
+                                  floorId: _selectedFloorId,
+                                  jwt: _jwt!,
+                                  height: 400,
+                                  controller: _pbdCtrl,
+                                  devices: _devices,
+                                )
+                              else
+                                const Text('Давхар олдсонгүй.'),
+                              const SizedBox(height: 120),
+                            ],
+                          ],
+                        ],
                       ),
                     ),
-                    _DevicesSheet(
-                      devices: _devices,
-                      latestByDeviceId: _latestByDeviceId,
-                    ),
+
+                    // Доод талаас дээш драглагдах төхөөрөмжийн картууд
+                    if (_selectedFloorId != null)
+                      _DevicesSheet(devices: _devices),
                   ],
                 );
               },
@@ -250,110 +272,39 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 }
 
-/* ------------------------ Overview (ар тал) ------------------------ */
+/* ------------------------ Devices Draggable Sheet ------------------------ */
 
-class _OverviewBody extends StatelessWidget {
-  final SiteOverview ov;
-  final String siteId;
-  final String? jwt;
-  final List<FloorItem> floors;
-  final String? selectedFloorId;
-  final bool loadingFloors;
-  final String? floorsErr;
-  final PbdCardController pbdCtrl;
+class _DevicesSheet extends StatefulWidget {
   final List<Map<String, dynamic>> devices;
-  final VoidCallback onReloadFloors;
-  final ValueChanged<String> onFloorChanged;
 
-  const _OverviewBody({
-    required this.ov,
-    required this.siteId,
-    required this.jwt,
-    required this.floors,
-    required this.selectedFloorId,
-    required this.loadingFloors,
-    required this.floorsErr,
-    required this.pbdCtrl,
-    required this.devices,
-    required this.onReloadFloors,
-    required this.onFloorChanged,
-  });
+  const _DevicesSheet({super.key, required this.devices});
 
   @override
-  Widget build(BuildContext context) {
-    return ListView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.all(16),
-      children: [
-        const SizedBox(height: 12),
-        _DashboardHeader(
-          outsideTemp: ov.weather?.tempC ?? 0,
-          humidity: ov.weather?.humidity ?? 0,
-          weatherTemp: (ov.weather?.tempC ?? 0).round(),
-          windSpeed: (ov.weather?.windSpeedMs ?? 0).round(),
-          rainProb: (ov.weather?.rainProb ?? 0).round(),
-        ),
-        const SizedBox(height: 12),
-
-        if (jwt != null) ...[
-          if (loadingFloors) ...[
-            const LinearProgressIndicator(minHeight: 2),
-            const SizedBox(height: 8),
-          ] else if (floorsErr != null) ...[
-            Text(
-              'Алдаа: $floorsErr',
-              style: const TextStyle(color: Colors.redAccent),
-            ),
-            TextButton(
-              onPressed: onReloadFloors,
-              child: const Text('Дахин ачаалах'),
-            ),
-            const SizedBox(height: 8),
-          ] else ...[
-            if (floors.isNotEmpty)
-              PbdFloorSelector(
-                floors: floors,
-                selectedFloorId: selectedFloorId,
-                onChanged: onFloorChanged,
-              ),
-            const SizedBox(height: 8),
-
-            if (selectedFloorId != null)
-              PbdCard(
-                key: ValueKey('pbd-$selectedFloorId'),
-                baseUrl: "https://api.habea.mn",
-                siteId: siteId,
-                floorId: selectedFloorId,
-                jwt: jwt!,
-                height: 400,
-                controller: pbdCtrl,
-                devices: devices,
-              )
-            else
-              const Text('Давхар олдсонгүй.'),
-            const SizedBox(height: 120),
-          ],
-        ],
-      ],
-    );
-  }
+  State<_DevicesSheet> createState() => _DevicesSheetState();
 }
 
-/* ------------------------ Draggable Devices Sheet (урд тал) ------------------------ */
-
-class _DevicesSheet extends StatelessWidget {
-  final List<Map<String, dynamic>> devices;
-  final Map<String, Map<String, dynamic>> latestByDeviceId;
-
-  const _DevicesSheet({
-    super.key,
-    required this.devices,
-    required this.latestByDeviceId,
-  });
+class _DevicesSheetState extends State<_DevicesSheet> {
+  /// null = All, бусад үед roomId
+  String? _selectedRoomId;
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+
+    final allDevices = widget.devices;
+
+    // Тухайн давхарт device-тэй өрөөнүүд (давхардалгүй)
+    final rooms = _buildRoomsFromDevices(allDevices);
+
+    // Шүүлтүүртэй төхөөрөмжийн жагсаалт
+    final filteredDevices = _selectedRoomId == null
+        ? allDevices
+        : allDevices
+            .where(
+              (d) =>
+                  d['roomId'] != null && d['roomId'] == _selectedRoomId,
+            )
+            .toList();
 
     return DraggableScrollableSheet(
       initialChildSize: 0.12,
@@ -371,7 +322,7 @@ class _DevicesSheet extends StatelessWidget {
               BoxShadow(
                 blurRadius: 18,
                 color: Colors.black.withOpacity(.45),
-              )
+              ),
             ],
             border: Border(
               top: BorderSide(
@@ -383,11 +334,16 @@ class _DevicesSheet extends StatelessWidget {
             controller: scroll,
             slivers: [
               const _SheetHandle(),
-              const _RoomChipsBar(),
-              _DevicesListSliver(
-                devices: devices,
-                latestByDeviceId: latestByDeviceId,
+              _RoomChipsBar(
+                rooms: rooms,
+                selectedRoomId: _selectedRoomId,
+                onChanged: (roomId) {
+                  setState(() {
+                    _selectedRoomId = roomId;
+                  });
+                },
               ),
+              _DevicesListSliver(devices: filteredDevices),
               const SliverToBoxAdapter(child: SizedBox(height: 28)),
             ],
           ),
@@ -419,8 +375,40 @@ class _SheetHandle extends StatelessWidget {
   }
 }
 
+class _RoomTab {
+  final String id;
+  final String name;
+  const _RoomTab({required this.id, required this.name});
+}
+
+// devices-ээс roomId/roomName-ийг гаргаж List<_RoomTab> болгоно
+List<_RoomTab> _buildRoomsFromDevices(
+    List<Map<String, dynamic>> devices) {
+  final Map<String, _RoomTab> map = {};
+  for (final d in devices) {
+    final roomId = d['roomId'] as String?;
+    if (roomId == null) continue;
+
+    final rawName = (d['roomName'] as String?) ?? '';
+    final name =
+        rawName.trim().isNotEmpty ? rawName.trim() : 'Room';
+
+    map.putIfAbsent(roomId, () => _RoomTab(id: roomId, name: name));
+  }
+  return map.values.toList();
+}
+
 class _RoomChipsBar extends StatelessWidget {
-  const _RoomChipsBar();
+  final List<_RoomTab> rooms;
+  final String? selectedRoomId;
+  final ValueChanged<String?> onChanged;
+
+  const _RoomChipsBar({
+    required this.rooms,
+    required this.selectedRoomId,
+    required this.onChanged,
+  });
+
   @override
   Widget build(BuildContext context) {
     return SliverToBoxAdapter(
@@ -430,35 +418,55 @@ class _RoomChipsBar extends StatelessWidget {
           spacing: 8,
           runSpacing: -4,
           children: [
-            _chip('All', selected: true),
-            _chip('Зочны өрөө'),
-            _chip('Гал тогоо'),
-            _chip('Унтлагын'),
+            _RoomChip(
+              label: 'All',
+              selected: selectedRoomId == null,
+              onTap: () => onChanged(null),
+            ),
+            for (final r in rooms)
+              _RoomChip(
+                label: r.name,
+                selected: selectedRoomId == r.id,
+                onTap: () => onChanged(r.id),
+              ),
           ],
         ),
       ),
     );
   }
+}
 
-  static Widget _chip(String text, {bool selected = false}) {
+class _RoomChip extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _RoomChip({
+    required this.label,
+    required this.onTap,
+    this.selected = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     return FilterChip(
       selected: selected,
-      onSelected: (_) {},
-      label: Text(text),
+      onSelected: (_) => onTap(),
+      label: Text(label),
       showCheckmark: false,
       selectedColor: const Color(0xFF0EA5A4).withOpacity(.22),
     );
   }
 }
 
+
 /// Нэг төхөөрөмж = нэг карт
 class _DevicesListSliver extends StatelessWidget {
   final List<Map<String, dynamic>> devices;
-  final Map<String, Map<String, dynamic>> latestByDeviceId;
 
   const _DevicesListSliver({
+    super.key,
     required this.devices,
-    required this.latestByDeviceId,
   });
 
   @override
@@ -467,48 +475,57 @@ class _DevicesListSliver extends StatelessWidget {
       return const SliverToBoxAdapter(
         child: Padding(
           padding: EdgeInsets.all(16),
-          child: Text('Энэ давхарт төхөөрөмж алга байна.'),
+          child: Text(
+            'Энэ давхарт төхөөрөмж алга байна.',
+            style: TextStyle(color: Colors.white70),
+          ),
         ),
       );
     }
 
     return SliverList(
       delegate: SliverChildBuilderDelegate(
-        (context, index) {
+        (ctx, index) {
           final d = devices[index];
-          final id = d['id'] as String? ?? '';
+          final name = (d['label'] as String?)?.trim().isNotEmpty == true
+              ? d['label'] as String
+              : (d['name'] as String?) ?? 'Device';
           final domain = (d['domain'] as String?) ?? '';
-          final label =
-              (d['label'] as String?) ??
-              (d['name'] as String?) ??
-              'Төхөөрөмж';
-          final latest = latestByDeviceId[id];
+          final isOn = (d['isOn'] as bool?) ?? false;
+          final sensors = (d['sensors'] as List<dynamic>?)
+                  ?.cast<Map<String, dynamic>>() ??
+              const <Map<String, dynamic>>[];
 
           switch (domain) {
-            case 'climate':
-              // Паарны термостат
-              final tData = ClimateThermostatData(
-                name: label,
-                currentTemp:
-                    (latest?['temperature'] as num?)?.toDouble(),
-                targetTemp: ((latest?['setpoint'] ??
-                            latest?['occupied_heating_setpoint'] ??
-                            latest?['target_temp']) as num? ??
-                        22)
-                    .toDouble(),
-                hvacAction: latest?['hvac_action'] as String?,
-              );
-              return ClimateSection(
-                subtitle: 'Thermostat',
-                thermostats: [tData],
-                sensors: _sensorItemsFromLatest(latest),
+            case 'light':
+              return _LightDeviceCard(
+                name: name,
+                isOn: isOn,
+                brightness: _findBrightness(sensors),
               );
 
+            case 'switch':
+            case 'outlet':
+              return _SwitchDeviceCard(
+                name: name,
+                isOn: isOn,
+              );
+
+            case 'climate':
+              return _ClimateThermostatCard(
+                name: name,
+                isOn: isOn,
+                setpoint: _findSetpoint(sensors),
+                temperature: _findTemperature(sensors),
+                humidity: _findHumidity(sensors),
+                battery: _findBattery(sensors),
+              );
+
+            case 'sensor':
             default:
-              // Ердийн sensor / coordinator гэх мэт
               return _SensorDeviceCard(
-                name: label,
-                latest: latest,
+                name: name,
+                metrics: _buildSensorMetrics(sensors),
               );
           }
         },
@@ -516,115 +533,395 @@ class _DevicesListSliver extends StatelessWidget {
       ),
     );
   }
-}
 
-/// LatestSensor → ClimateItem list (темп, чийг, CO₂, даралт, LQI, батерей)
-List<ClimateItem> _sensorItemsFromLatest(
-    Map<String, dynamic>? latest) {
-  if (latest == null) return const [];
+  /* ---------- helper функцууд (latestSensor-оос утга авах) ---------- */
 
-  final List<ClimateItem> out = [];
-
-  void addIfPresent(
-    String key,
-    IconData icon,
-    String label,
-    String suffix,
-  ) {
-    final v = latest[key];
-    if (v == null) return;
-    num? n;
-    if (v is num) {
-      n = v;
-    } else if (v is String) {
-      n = num.tryParse(v);
-    }
-    final valueStr =
-        n != null ? '${n.toString()}$suffix' : '$v$suffix';
-    out.add(ClimateItem(icon: icon, label: label, value: valueStr));
+  static double? _findTemperature(List<Map<String, dynamic>> sensors) {
+    final s = sensors.firstWhere(
+      (e) =>
+          (e['entityKey'] as String?)?.contains('current_temperature') ==
+              true ||
+          (e['entityKey'] as String?)?.contains('temperature') == true ||
+          (e['haEntityId'] as String?)?.contains('temperature') == true,
+      orElse: () => {},
+    );
+    final v = s['value'];
+    return v is num ? v.toDouble() : null;
   }
 
-  addIfPresent('temperature', Icons.thermostat_outlined, 'Темп.', '°C');
-  addIfPresent('humidity', Icons.water_drop_outlined, 'Чийгшил', '%');
-  addIfPresent('co2', Icons.co2, 'CO₂', ' ppm');
-  addIfPresent('pressure', Icons.speed, 'Даралт', ' hPa');
-  addIfPresent('battery', Icons.battery_full, 'Батерей', '%');
-  addIfPresent('lqi', Icons.network_wifi, 'LQI', '');
+  static double? _findHumidity(List<Map<String, dynamic>> sensors) {
+    final s = sensors.firstWhere(
+      (e) =>
+          (e['entityKey'] as String?)?.contains('humidity') == true ||
+          (e['haEntityId'] as String?)?.contains('humidity') == true,
+      orElse: () => {},
+    );
+    final v = s['value'];
+    return v is num ? v.toDouble() : null;
+  }
 
-  return out;
+  static double? _findBattery(List<Map<String, dynamic>> sensors) {
+    final s = sensors.firstWhere(
+      (e) =>
+          (e['entityKey'] as String?)?.contains('battery') == true ||
+          (e['haEntityId'] as String?)?.contains('battery') == true,
+      orElse: () => {},
+    );
+    final v = s['value'];
+    return v is num ? v.toDouble() : null;
+  }
+
+  static double? _findSetpoint(List<Map<String, dynamic>> sensors) {
+    // setpoint / target / Heat_Temperature г.м түлхүүрүүдийг шалгана
+    final s = sensors.firstWhere(
+      (e) {
+        final key = (e['entityKey'] as String?) ?? '';
+        if (key.contains('setpoint')) return true;
+        if (key.contains('target_temperature')) return true;
+        if (key.toLowerCase().contains('heat_temperature')) return true;
+        return false;
+      },
+      orElse: () => {},
+    );
+    final v = s['value'];
+    return v is num ? v.toDouble() : null;
+  }
+
+  static double _findBrightness(List<Map<String, dynamic>> sensors) {
+    final s = sensors.firstWhere(
+      (e) =>
+          (e['entityKey'] as String?)?.contains('brightness') == true ||
+          (e['haEntityId'] as String?)?.contains('brightness') == true,
+      orElse: () => {},
+    );
+    final v = s['value'];
+    if (v is num) return v.toDouble().clamp(0, 100);
+    return 0;
+  }
+
+  static List<_SensorMetric> _buildSensorMetrics(
+      List<Map<String, dynamic>> sensors) {
+    final List<_SensorMetric> out = [];
+    for (final s in sensors) {
+      final key = (s['entityKey'] as String?) ?? '';
+      final unit = (s['unit'] as String?) ?? '';
+      final value = s['value'];
+
+      if (value is! num) continue;
+
+      IconData icon;
+      String label;
+
+      if (key.contains('temperature')) {
+        icon = Icons.thermostat_outlined;
+        label = 'Температур';
+      } else if (key.contains('humidity')) {
+        icon = Icons.water_drop_outlined;
+        label = 'Чийгшил';
+      } else if (key.contains('battery')) {
+        icon = Icons.battery_std;
+        label = 'Battery';
+      } else if (key.toLowerCase().contains('pressure')) {
+        icon = Icons.speed;
+        label = 'Даралт';
+      } else if (key.toLowerCase().contains('lqi')) {
+        icon = Icons.network_check;
+        label = 'LQI';
+      } else {
+        icon = Icons.sensors;
+        label = key;
+      }
+
+      out.add(
+        _SensorMetric(
+          icon: icon,
+          label: label,
+          value: '${value.toStringAsFixed(1)} $unit',
+        ),
+      );
+    }
+    return out;
+  }
 }
 
-/// Энгийн sensor төхөөрөмжийн карт
+
+/* ------------------------ 1) LIGHT CARD ------------------------ */
+
+class _LightDeviceCard extends StatelessWidget {
+  final String name;
+  final bool isOn;
+  final double brightness;
+
+  const _LightDeviceCard({
+    required this.name,
+    required this.isOn,
+    required this.brightness,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return _DeviceBaseCard(
+      title: name,
+      trailing: Switch(
+        value: isOn,
+        onChanged: (_) {}, // TODO: команд илгээх
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              const Icon(Icons.lightbulb_outline),
+              const SizedBox(width: 8),
+              const Text('Brightness'),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Slider(
+                  value: brightness,
+                  min: 0,
+                  max: 100,
+                  onChanged: (_) {}, // TODO
+                ),
+              ),
+              Text('${brightness.toStringAsFixed(0)}%'),
+            ],
+          ),
+          const SizedBox(height: 4),
+        ],
+      ),
+    );
+  }
+}
+
+/* ------------------------ 2) SWITCH / OUTLET CARD ------------------------ */
+
+class _SwitchDeviceCard extends StatelessWidget {
+  final String name;
+  final bool isOn;
+
+  const _SwitchDeviceCard({
+    required this.name,
+    required this.isOn,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return _DeviceBaseCard(
+      title: name,
+      trailing: Switch(
+        value: isOn,
+        onChanged: (_) {}, // TODO
+      ),
+    );
+  }
+}
+
+/* ------------------------ 3) CLIMATE (THERMOSTAT) CARD ------------------------ */
+
+class _ClimateThermostatCard extends StatelessWidget {
+  final String name;
+  final bool isOn;
+  final double? setpoint;
+  final double? temperature;
+  final double? humidity;
+  final double? battery;
+
+  const _ClimateThermostatCard({
+    required this.name,
+    required this.isOn,
+    this.setpoint,
+    this.temperature,
+    this.humidity,
+    this.battery,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final sp = setpoint ?? 22.0;
+
+    return _DeviceBaseCard(
+      title: name,
+      subtitle: 'Thermostat',
+      trailing: Switch(
+        value: isOn,
+        onChanged: (_) {}, // TODO
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 4),
+          const Text(
+            'Setpoint',
+            style: TextStyle(fontSize: 12, color: Colors.white70),
+          ),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              Expanded(
+                child: Slider(
+                  value: sp,
+                  min: 5,
+                  max: 35,
+                  onChanged: (_) {}, // TODO
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '${sp.toStringAsFixed(1)}°C',
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              if (temperature != null) ...[
+                const Icon(Icons.thermostat_outlined, size: 16),
+                const SizedBox(width: 4),
+                Text('${temperature!.toStringAsFixed(1)}°C',
+                    style: const TextStyle(fontSize: 12)),
+              ],
+              if (humidity != null) ...[
+                const SizedBox(width: 16),
+                const Icon(Icons.water_drop_outlined, size: 16),
+                const SizedBox(width: 4),
+                Text('${humidity!.toStringAsFixed(0)}%',
+                    style: const TextStyle(fontSize: 12)),
+              ],
+              if (battery != null) ...[
+                const SizedBox(width: 16),
+                const Icon(Icons.battery_std, size: 16),
+                const SizedBox(width: 4),
+                Text('${battery!.toStringAsFixed(0)}%',
+                    style: const TextStyle(fontSize: 12)),
+              ],
+            ],
+          ),
+          const SizedBox(height: 4),
+        ],
+      ),
+    );
+  }
+}
+
+/* ------------------------ 4) SENSOR CARD ------------------------ */
+
+class _SensorMetric {
+  final IconData icon;
+  final String label;
+  final String value;
+
+  const _SensorMetric({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+}
+
 class _SensorDeviceCard extends StatelessWidget {
   final String name;
-  final Map<String, dynamic>? latest;
+  final List<_SensorMetric> metrics;
 
   const _SensorDeviceCard({
     required this.name,
-    this.latest,
+    required this.metrics,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return _DeviceBaseCard(
+      title: name,
+      subtitle: metrics.isEmpty ? 'Мэдрэгчийн дата алга байна.' : null,
+      trailing: const Icon(Icons.chevron_right),
+      child: Column(
+        children: [
+          for (final m in metrics) ...[
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Icon(m.icon, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    m.label,
+                    style: const TextStyle(fontSize: 13),
+                  ),
+                ),
+                Text(
+                  m.value,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ],
+          const SizedBox(height: 4),
+        ],
+      ),
+    );
+  }
+}
+
+/* ------------------------ Суурь картын wrapper ------------------------ */
+
+class _DeviceBaseCard extends StatelessWidget {
+  final String title;
+  final String? subtitle;
+  final Widget? trailing;
+  final Widget? child;
+
+  const _DeviceBaseCard({
+    required this.title,
+    this.subtitle,
+    this.trailing,
+    this.child,
   });
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final items = _sensorItemsFromLatest(latest);
-
     return Container(
-      margin: const EdgeInsets.fromLTRB(12, 8, 12, 10),
-      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.fromLTRB(12, 6, 12, 10),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: const Color(0xFF17181B),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: cs.outlineVariant.withOpacity(.15)),
+        border: Border.all(color: cs.outlineVariant.withOpacity(.18)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Icon(Icons.sensors, size: 18, color: Colors.amber),
+              Icon(Icons.bolt, size: 18, color: Colors.amber.shade300),
               const SizedBox(width: 8),
-              Text(
-                name,
-                style: Theme.of(context).textTheme.titleMedium,
+              Expanded(
+                child: Text(
+                  title,
+                  style: Theme.of(context).textTheme.titleMedium,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-              const Spacer(),
-              Icon(Icons.chevron_right,
-                  color: Colors.white.withOpacity(.5)),
+              if (trailing != null) trailing!,
             ],
           ),
-          const SizedBox(height: 8),
-          if (items.isEmpty)
+          if (subtitle != null) ...[
+            const SizedBox(height: 4),
             Text(
-              'Мэдрэгчийн дата алга байна.',
+              subtitle!,
               style: Theme.of(context)
                   .textTheme
                   .labelMedium
                   ?.copyWith(color: Colors.white70),
-            )
-          else
-            for (final it in items) ...[
-              const SizedBox(height: 6),
-              Row(
-                children: [
-                  Icon(it.icon, size: 18),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      it.label,
-                      style: Theme.of(context).textTheme.titleSmall,
-                    ),
-                  ),
-                  Text(
-                    it.value,
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleSmall
-                        ?.copyWith(fontWeight: FontWeight.w700),
-                  ),
-                ],
-              ),
-            ],
+            ),
+          ],
+          if (child != null) ...[
+            const SizedBox(height: 8),
+            child!,
+          ],
         ],
       ),
     );
@@ -637,8 +934,8 @@ class _DashboardHeader extends StatelessWidget {
   final double outsideTemp;
   final double humidity;
   final int weatherTemp;
-  final int windSpeed; // м/с
-  final int rainProb; // %
+  final int windSpeed;
+  final int rainProb;
 
   const _DashboardHeader({
     required this.outsideTemp,
@@ -647,6 +944,7 @@ class _DashboardHeader extends StatelessWidget {
     required this.windSpeed,
     required this.rainProb,
   });
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -678,20 +976,25 @@ class _DashboardHeader extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 12),
-        _InlineInfoCard(items: [
-          _InlineItem(
+        _InlineInfoCard(
+          items: [
+            _InlineItem(
               icon: Icons.cloud_outlined,
               label: 'Цаг агаар',
-              value: '$weatherTemp°C'),
-          _InlineItem(
+              value: '$weatherTemp°C',
+            ),
+            _InlineItem(
               icon: Icons.air_outlined,
               label: 'Салхины хурд',
-              value: '$windSpeedм/с'),
-        _InlineItem(
+              value: '$windSpeedм/с',
+            ),
+            _InlineItem(
               icon: Icons.umbrella_outlined,
               label: 'Тунадас магадлал',
-              value: '$rainProb%'),
-        ]),
+              value: '$rainProb%',
+            ),
+          ],
+        ),
       ],
     );
   }
@@ -790,8 +1093,11 @@ class _InlineItem {
   final IconData icon;
   final String label;
   final String value;
-  const _InlineItem(
-      {required this.icon, required this.label, required this.value});
+  const _InlineItem({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
 }
 
 class _InlineInfoCard extends StatelessWidget {
@@ -859,10 +1165,12 @@ class _InlineInfoItem extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(item.label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: labelStyle),
+              Text(
+                item.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: labelStyle,
+              ),
               const SizedBox(height: 2),
               Text(item.value, style: valueStyle),
             ],

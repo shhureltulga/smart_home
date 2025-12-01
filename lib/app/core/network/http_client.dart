@@ -238,6 +238,26 @@ class ApiClient {
       options: opts,
     );
   }
+  Future<List<Map<String, dynamic>>> getFloorDeviceCards(
+    String siteId,
+    String floorId,
+  ) async {
+    final res = await _dio.get('/sites/$siteId/floors/$floorId/devices/card');
+    final data = res.data;
+
+    List raw;
+    if (data is Map<String, dynamic>) {
+      raw = (data['devices'] ?? []) as List;
+    } else if (data is List) {
+      raw = data;
+    } else {
+      raw = const [];
+    }
+
+    return raw
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
+  }
 
   
 }
@@ -320,3 +340,4 @@ extension DeviceApi on ApiClient {
     return jsonDecode(raw) as Map<String, dynamic>;
   }
 }
+

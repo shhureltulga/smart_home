@@ -136,9 +136,13 @@ const devicePopupEl = document.getElementById('device-popup');
 
 const THEME = { bg:'#0A1520', fog:'#0A1520', grid1:0x123241, grid2:0x0b2330, wall:0x59D6FF, edge:0xB3ECFF, roomLabel:'#9ddfff' };
 
-const S = {scene:null, cam:null, renderer:null, labelRenderer:null, controls:null,
-           wallsG:null, floorG:null, lightsG:null, curtainsG:null, labels:[], bbox:null,
-           lightSprites:[], lightBaseOpacity:0.9};
+const S = {
+  scene:null, cam:null, renderer:null, labelRenderer:null, controls:null,
+  wallsG:null, floorG:null, lightsG:null, curtainsG:null, labels:[], bbox:null,
+  lightSprites:[], lightBaseOpacity:0.9,
+  roomCentersG:null,   // 👈 нэмнэ
+};
+
 
 const LIGHT_DIM_OPACITY = 0.12, LIGHT_DIM_TINT = 0x5a86a0, LIGHT_ON_TINT = 0xffffff;
 const EPS = 1e-3;
@@ -556,36 +560,44 @@ function isZeroPos(p){ return !p || ((+p.x||0)===0 && (+p.z||0)===0); }
  */
 function enrichDevicesWithRoomCenter(list, { baseRadius = 0.6, ringStep = 0.45 } = {}) {
   const out = [];
-  const groups = new Map(); // roomId → devices[]
+  const groups = new Map(); // roomKey → devices[]
 
-  // 1) domain infer хийгээд room-аар бүлэглэе
   for (const d of (list || [])) {
     const dev = { ...d };
     if (!dev.domain) dev.domain = inferDomain(dev);
 
-    // аль хэдийн өөрийн pos-той (0,0 биш) бол орхи
-    if (dev.pos && !isZeroPos(dev.pos)) {
+    const hasRoom = dev.roomId != null;
+
+    // 🔴 roomKey-г бас string болгоно
+    const roomKey = hasRoom ? String(dev.roomId) : '_no_room_';
+
+    if (!hasRoom && dev.pos && !isZeroPos(dev.pos)) {
       out.push(dev);
       continue;
     }
 
-    const key = dev.roomId || '_no_room_';
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(dev);
+    if (!groups.has(roomKey)) groups.set(roomKey, []);
+    groups.get(roomKey).push(dev);
+
+    // 🔍 Debug: энэ roomId дээр төв байгаа эсэхийг консолоор харуулна
+    if (hasRoom && !ROOM_CENTER.has(roomKey)) {
+      console.warn('[DEV] roomId-д CENTER байхгүй байна:', roomKey, dev.deviceKey || dev.id || dev.name);
+    }
   }
 
-  // 2) Өрөө бүр дээрх төхөөрөмжүүдийг тойрог дээр тараана
-  for (const [roomId, devs] of groups.entries()) {
-    // төв координат
-    const c = ROOM_CENTER.get(roomId) || { x: 0, z: 0 };
+  // 2) Өрөө бүрийн тойрог дээр тараах
+  for (const [roomKey, devs] of groups.entries()) {
+    const c = ROOM_CENTER.get(roomKey) || { x: 0, z: 0 };
+
+    console.log('[DEV-GROUP]', roomKey, 'center=', c, 'count=', devs.length);
 
     const n = devs.length;
     if (n === 1) {
-      // ганц байвал яг төвд нь
       const d = devs[0];
       const y = d.pos?.y ?? 0.9;
       d.pos = { x: c.x, y, z: c.z };
       out.push(d);
+      console.log('[DEV-POS-1]', d.deviceKey || d.id, '→', d.pos);
       continue;
     }
 
@@ -593,15 +605,17 @@ function enrichDevicesWithRoomCenter(list, { baseRadius = 0.6, ringStep = 0.45 }
       const d = devs[i];
       const y = d.pos?.y ?? 0.9;
 
-      const ring = Math.floor(i / 6);          // 0..5 хүртэл 1 тойрог, 6-11 дараагийн тойрог гэх мэт
+      const ring  = Math.floor(i / 6);
       const angle = (2 * Math.PI * i) / Math.max(1, n);
-      const r = baseRadius + ring * ringStep;  // 0.6, 1.05, 1.5 ...
+      const r     = baseRadius + ring * ringStep;
 
       const x = c.x + Math.cos(angle) * r;
       const z = c.z + Math.sin(angle) * r;
 
       d.pos = { x, y, z };
       out.push(d);
+
+      console.log('[DEV-POS]', d.deviceKey || d.id, 'roomKey=', roomKey, '→', d.pos);
     }
   }
 
@@ -922,6 +936,33 @@ window.PBD.setDevices = function(devices){
   }
 };
 
+function drawRoomCentersDebug(){
+  if (!S.roomCentersG) return;
+  S.roomCentersG.clear();
+
+  const mat = new THREE.LineBasicMaterial({
+    color: 0xff00ff,
+    transparent: true,
+    opacity: 0.8,
+    depthWrite: false,
+  });
+
+  ROOM_CENTER.forEach((rc, key) => {
+    const g = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(rc.x - 0.15, 0.03, rc.z),
+      new THREE.Vector3(rc.x + 0.15, 0.03, rc.z),
+      new THREE.Vector3(rc.x, 0.03, rc.z - 0.15),
+      new THREE.Vector3(rc.x, 0.03, rc.z + 0.15),
+    ]);
+    const line = new THREE.LineSegments(g, mat);
+    line.renderOrder = 3.5;
+    S.roomCentersG.add(line);
+  });
+
+  console.log('[ROOM_CENTER_DEBUG drawn]');
+}
+
+
 /* ───────────── INIT 3D ───────────── */
 function init3D(){
   const w = wrap.clientWidth, h = wrap.clientHeight;
@@ -970,6 +1011,9 @@ function init3D(){
   S.devicesG = { root:new THREE.Group(), sockets:new THREE.Group(), heaters:new THREE.Group() };
   S.devicesG.root.add(S.devicesG.sockets, S.devicesG.heaters);
   S.scene.add(S.devicesG.root);
+
+  S.roomCentersG = new THREE.Group();
+  S.scene.add(S.roomCentersG);
 }
 
 function updateCompactUI(){
@@ -1107,21 +1151,63 @@ function buildFromPBD(pbd){
     rc.z -= c.z;
   }
 
+   drawRoomCentersDebug();
+   
   S.bbox = new THREE.Box3().setFromObject(S.wallsG);
   return S.bbox;
 }
+
+function polygonCentroid(poly){
+  if (!poly || !poly.length) return { x: 0, z: 0 };
+
+  let areaAcc = 0;
+  let cxAcc = 0;
+  let czAcc = 0;
+  const n = poly.length;
+
+  for (let i = 0; i < n; i++) {
+    const [x1, z1] = poly[i];
+    const [x2, z2] = poly[(i + 1) % n];
+    const cross = x1 * z2 - x2 * z1;
+
+    areaAcc += cross;
+    cxAcc   += (x1 + x2) * cross;
+    czAcc   += (z1 + z2) * cross;
+  }
+
+  const area = areaAcc * 0.5;
+
+  // талбай маш бага бол – нөөц хувилбар: жирийн дундаж
+  if (Math.abs(area) < 1e-6) {
+    let sx = 0, sz = 0;
+    for (const [x, z] of poly) { sx += x; sz += z; }
+    return { x: sx / n, z: sz / n };
+  }
+
+  const factor = 1 / (6 * area);
+  return {
+    x: cxAcc * factor,
+    z: czAcc * factor,
+  };
+}
+
 
 /* centers */
 function buildRoomCenters(pbd){
   ROOM_CENTER.clear();
   for (const r of (pbd.rooms || [])){
     if (!r.id || !r.polygon?.length) continue;
-    let cx=0, cz=0;
-    for (const [x,z] of r.polygon){ cx+=x; cz+=z; }
-    cx/=r.polygon.length; cz/=r.polygon.length;
-    ROOM_CENTER.set(r.id, { x: cx, z: cz });
+    const c = polygonCentroid(r.polygon);  // өмнөх centroid ашиглаж байга гэж үзье
+
+    // 🔴 ГОЛ НӨХӨЦ: түлхүүрийг string болгоно
+    const key = String(r.id);
+    ROOM_CENTER.set(key, { x: c.x, z: c.z });
   }
+
+  console.log('[ROOM_CENTER] map =', [...ROOM_CENTER.entries()]);
 }
+
+
 
 /* XY→XZ flip */
 function flipZ(pbd){
@@ -1159,10 +1245,8 @@ function dedupSegments(rooms){
 function addRoomLabels(rooms){
   for (const r of rooms){
     if (!r.name || !r.polygon?.length) continue;
-    let cx=0, cz=0;
-    for (const [x,z] of r.polygon){ cx+=x; cz+=z; }
-    cx /= r.polygon.length;
-    cz /= r.polygon.length;
+
+    const { x: cx, z: cz } = polygonCentroid(r.polygon);
 
     const div = document.createElement('div');
     div.textContent = r.name;
@@ -1172,12 +1256,13 @@ function addRoomLabels(rooms){
     div.style.textShadow = '0 0 8px rgba(102,217,255,.65)';
 
     const obj = new CSS2DObject(div);
-    obj.position.set(cx,2.0,cz);
+    obj.position.set(cx, 2.0, cz);
     obj.userData = { followGroup:true };
     S.labels.push(obj);
     S.scene.add(obj);
   }
 }
+
 function setLabelsVisible(v){
   S.labels.forEach(o => o.visible = v);
 }
@@ -1492,6 +1577,8 @@ window.start = async () => {
     loading.textContent = 'ERR: ' + (e?.message || e);
   }
 };
+
+
 </script>
 </body>
 </html>
