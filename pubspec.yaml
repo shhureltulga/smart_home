@@ -13,6 +13,11 @@ dependencies:
   get: ^4.6.6
   get_storage: ^2.1.1
   http: ^1.2.2
+  # better_player:
+  #   path: patched_packages/better_player
+  media_kit: ^1.1.10
+  media_kit_video: ^1.2.5
+  media_kit_libs_android_video: ^1.0.5
   # flutter_secure_storage: ^9.2.2
   dio: ^5.6.0
   flutter_secure_storage: ^9.0.0

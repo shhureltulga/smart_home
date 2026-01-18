@@ -238,26 +238,46 @@ class ApiClient {
       options: opts,
     );
   }
+
   Future<List<Map<String, dynamic>>> getFloorDeviceCards(
-    String siteId,
-    String floorId,
-  ) async {
-    final res = await _dio.get('/sites/$siteId/floors/$floorId/devices/card');
-    final data = res.data;
+  String siteId,
+  String floorId,
+) async {
+  final resp = await get<dynamic>(
+    '/sites/$siteId/floors/$floorId/devices/card',
+    withAuth: true,
+  );
 
-    List raw;
-    if (data is Map<String, dynamic>) {
-      raw = (data['devices'] ?? []) as List;
-    } else if (data is List) {
-      raw = data;
-    } else {
-      raw = const [];
-    }
+  final data = resp.data;
 
-    return raw
-        .map((e) => Map<String, dynamic>.from(e as Map))
-        .toList();
+  // 1) data-г эхлээд dynamic root болгож нормальчилно
+  dynamic root;
+  if (data == null) {
+    root = {};
+  } else if (data is String) {
+    root = jsonDecode(data.isEmpty ? '{}' : data);
+  } else {
+    root = data;
   }
+
+  // 2) items/list-ээ гаргаж авах
+  dynamic items;
+  if (root is Map<String, dynamic>) {
+    items = root['devices'] ?? root['items'] ?? root['data'] ?? [];
+  } else if (root is List) {
+    items = root;
+  } else {
+    items = [];
+  }
+
+  // 3) List<Map> болгож буцаах
+  if (items is! List) return const [];
+
+  return items
+      .whereType<dynamic>()
+      .map((e) => Map<String, dynamic>.from(e as Map))
+      .toList();
+}
 
   
 }
@@ -340,4 +360,21 @@ extension DeviceApi on ApiClient {
     return jsonDecode(raw) as Map<String, dynamic>;
   }
 }
+// ---- Camera API ----
+extension CameraApi on ApiClient {
+  Future<Map<String, dynamic>> getCameraLive(String entityId) async {
+    final resp = await get<dynamic>(
+      '/api/camera/$entityId/live',
+      withAuth: true,
+    );
 
+    final data = resp.data;
+
+    if (data is Map<String, dynamic>) return data;
+    if (data is String) {
+      return jsonDecode(data.isEmpty ? '{}' : data) as Map<String, dynamic>;
+    }
+
+    throw Exception('Invalid camera live response: ${data.runtimeType}');
+  }
+}

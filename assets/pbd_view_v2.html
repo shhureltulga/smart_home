@@ -246,6 +246,40 @@ async function haCallService(domain, service, data){
     return null;
   }
 }
+/* ==================== Flutter / Host bridge for commands ==================== */
+
+function _hasHostBridge() {
+  return !!(window.PBD && typeof window.PBD.postMessage === 'function');
+}
+
+/**
+ * Backend (Flutter) рүү команд дамжуулна.
+ * - deviceId заавал хэрэгтэй (Prisma Device.id)
+ * - action/value таны Flutter талын ApiClient.sendDeviceCommand-тэй таарна
+ */
+function sendCommandToHost({ deviceId, action, value, domain, entityId, deviceKey }) {
+  if (!_hasHostBridge()) return false;
+  if (!deviceId || !action) return false;
+
+  const msg = {
+    type: 'device_command',
+    deviceId,
+    action,
+    value: value ?? null,
+    domain: domain ?? null,
+    entityId: entityId ?? null,
+    deviceKey: deviceKey ?? null,
+    ts: Date.now(),
+  };
+
+  try {
+    window.PBD.postMessage(JSON.stringify(msg));
+    return true;
+  } catch (e) {
+    console.warn('sendCommandToHost error', e);
+    return false;
+  }
+}
 
 /* === Popup helpers === */
 function showDevicePopup(x, y, html){
@@ -355,43 +389,119 @@ function buildDevicePopupHtml(uiType, ctx){
 }
 
 function attachDevicePopupHandlers(uiType, ctx){
-  const { entityId, domain } = ctx;
-  if (!entityId) return; // HA байхгүй үед control ажиллуулахгүй
+  const { entityId, domain, meta } = ctx;
+
+  // ✅ Backend командын гол түлхүүр: Prisma Device.id
+  const deviceId  = meta?.id || meta?.deviceId || null;
+  const deviceKey = meta?.deviceKey || meta?.device_key || null;
+
+  // Команд илгээх нэг мөр функц
+  const sendCmd = async (svc, value = null) => {
+    // 1) ✅ Prefer: Flutter bridge → backend
+    const ok = sendCommandToHost({
+      deviceId,
+      action: svc,
+      value,
+      domain,
+      entityId,
+      deviceKey,
+    });
+    if (ok) return true;
+
+    // 2) 🟨 Fallback: хуучин HA (эвдэхгүй хадгалж үлдэж байна)
+    if (!entityId) {
+      console.warn('[CMD] No host bridge or deviceId, and no entityId for HA fallback.', { deviceId, svc, value });
+      return false;
+    }
+
+    // svc нэршлийг HA service-ээр ашиглана (turn_on, turn_off, set_temperature, open_cover...)
+    if (uiType === 'toggle') {
+      await haCallService(domain || 'switch', svc, { entity_id: entityId });
+      return true;
+    }
+
+    if (uiType === 'climate') {
+      await haCallService('climate', 'set_temperature', { entity_id: entityId, temperature: value });
+      return true;
+    }
+
+    if (uiType === 'cover') {
+      await haCallService('cover', svc, { entity_id: entityId });
+      return true;
+    }
+
+    return false;
+  };
+
+  /* ---------------- TOGGLE (light/switch/fan/...) ---------------- */
 
   if (uiType === 'toggle'){
     const btn = document.getElementById('dp-tg-btn');
     const label = document.getElementById('dp-tg-status');
     if (!btn || !label) return;
+
     btn.onclick = async () => {
       const isOn = label.textContent === 'ON';
-      await haCallService(domain || 'switch', isOn ? 'turn_off' : 'turn_on', { entity_id: entityId });
+      const svc  = isOn ? 'turn_off' : 'turn_on';
+
+      await sendCmd(svc, null);
+
+      // ✅ UI-г шууд шинэчилнэ (optimistic)
       label.textContent = isOn ? 'OFF' : 'ON';
       btn.textContent   = isOn ? 'Turn on' : 'Turn off';
     };
   }
+
+  /* ---------------- CLIMATE (thermostat) ---------------- */
 
   if (uiType === 'climate'){
     const span = document.getElementById('dp-cl-val');
     const dec  = document.getElementById('dp-cl-dec');
     const inc  = document.getElementById('dp-cl-inc');
     if (!span || !dec || !inc) return;
+
     let val = parseFloat(span.textContent) || 0;
-    const send = async () => {
-      await haCallService('climate','set_temperature',{ entity_id: entityId, temperature: val });
+
+    const commit = async () => {
+      // heat_temperature байвал тэрийг update хийх action-оор явуулна
+      const hasHeatTemp = (meta?.sensors || []).some(s =>
+        String(s.entityKey || '').toLowerCase() === 'heat_temperature'
+      );
+
+      // ✅ Та нарын backend/Flutter аль action-ыг хүлээж авч map хийдэг вэ түүнд тааруул:
+      // (ихэнхдээ өмнөх лог дээр байсан тул эхнийхийг санал болгож байна)
+      const action = hasHeatTemp ? 'set_setpoint' : 'set_temperature';
+      // Хэрвээ backend чинь шууд heat_temperature нэрээр хүлээдэг бол:
+      // const action = hasHeatTemp ? 'set_heat_temperature' : 'set_temperature';
+
+      await sendCmd(action, val);
     };
-    dec.onclick = async () => { val = Math.round((val - 0.5)*10)/10; span.textContent = val.toFixed(1); await send(); };
-    inc.onclick = async () => { val = Math.round((val + 0.5)*10)/10; span.textContent = val.toFixed(1); await send(); };
+
+
+    dec.onclick = async () => {
+      val = Math.round((val - 0.5) * 10) / 10;
+      span.textContent = val.toFixed(1);
+      await commit();
+    };
+
+    inc.onclick = async () => {
+      val = Math.round((val + 0.5) * 10) / 10;
+      span.textContent = val.toFixed(1);
+      await commit();
+    };
   }
+
+  /* ---------------- COVER (curtain/blinds) ---------------- */
 
   if (uiType === 'cover'){
     const open  = document.getElementById('dp-cv-open');
     const stop  = document.getElementById('dp-cv-stop');
     const close = document.getElementById('dp-cv-close');
     if (!open || !stop || !close) return;
-    const call = (svc) => haCallService('cover', svc, { entity_id: entityId });
-    open.onclick  = () => call('open_cover');
-    stop.onclick  = () => call('stop_cover');
-    close.onclick = () => call('close_cover');
+
+    open.onclick  = async () => { await sendCmd('open_cover',  null); };
+    stop.onclick  = async () => { await sendCmd('stop_cover',  null); };
+    close.onclick = async () => { await sendCmd('close_cover', null); };
   }
 }
 
@@ -449,28 +559,37 @@ function buildSensorsWithControlsPopupHtml(uiType, ctx){
     ? '<div class="dp-footer">No entityId linked</div>'
     : (!haState ? '<div class="dp-footer">HA state not available</div>' : '');
 
-  if (uiType === 'climate'){
-    const st    = haState;
-    const cur   = st?.attributes?.current_temperature ?? meta?.currentTemp ?? '—';
-    const target= st?.attributes?.temperature ?? meta?.targetTemp ?? cur ?? '—';
-    const unit  = st?.attributes?.unit_of_measurement || meta?.unit || '°C';
-    const mode  = st?.attributes?.hvac_mode || meta?.mode || '';
+ if (uiType === 'climate'){
+  const st = haState;
 
-    return `
-      <h4>${name}</h4>
-      ${meta.deviceKey ? `<div style="font-size:11px;opacity:.6;margin-bottom:4px;">${meta.deviceKey}</div>` : ''}
-      ${rows}
-      <hr style="border:none;border-top:1px solid rgba(255,255,255,.08);margin:6px 0 4px;">
-      <div class="dp-row">Current: <b>${cur}${unit}</b></div>
-      <div class="dp-row">Set:
-        <button id="dp-cl-dec">-</button>
-        <span id="dp-cl-val" style="margin:0 8px;">${target}</span>${unit}
-        <button id="dp-cl-inc">+</button>
-      </div>
-      <div class="dp-row" style="font-size:12px;opacity:.8;">Mode: ${mode || domain}</div>
-      ${noteHa}
-    `;
-  }
+  const getSensorVal = (keys) =>
+    (sensors || []).find(s => keys.includes(String(s.entityKey || '').toLowerCase()))?.value;
+
+  const sensorCur    = getSensorVal(['current_temperature']);
+  const sensorTarget = getSensorVal(['heat_temperature','target_temperature','setpoint','temperature']);
+
+  const cur    = st?.attributes?.current_temperature ?? sensorCur ?? meta?.currentTemp ?? '—';
+  const target = st?.attributes?.temperature ?? sensorTarget ?? meta?.targetTemp ?? cur ?? '—';
+
+  const unit  = st?.attributes?.unit_of_measurement || meta?.unit || '°C';
+  const mode  = st?.attributes?.hvac_mode || meta?.mode || '';
+
+  return `
+    <h4>${name}</h4>
+    ${meta.deviceKey ? `<div style="font-size:11px;opacity:.6;margin-bottom:4px;">${meta.deviceKey}</div>` : ''}
+    ${rows}
+    <hr style="border:none;border-top:1px solid rgba(255,255,255,.08);margin:6px 0 4px;">
+    <div class="dp-row">Current: <b>${cur}${unit}</b></div>
+    <div class="dp-row">Set:
+      <button id="dp-cl-dec">-</button>
+      <span id="dp-cl-val" style="margin:0 8px;">${target}</span>${unit}
+      <button id="dp-cl-inc">+</button>
+    </div>
+    <div class="dp-row" style="font-size:12px;opacity:.8;">Mode: ${mode || domain}</div>
+    ${noteHa}
+  `;
+}
+
 
   if (uiType === 'toggle'){
     const st  = haState;
@@ -493,8 +612,56 @@ function buildSensorsWithControlsPopupHtml(uiType, ctx){
 }
 
 
-async function handleDeviceClick(ev, meta){
-  try{
+async function handleDeviceClick(ev, meta) {
+  try {
+    // ------------------------------
+    // ✅ 1) CAMERA popup (snapshot)
+    // ------------------------------
+    const camKey = classifyDeviceKey(meta); // 'camera' гэж буцааж болно
+    const domGuess =
+      (meta.domain || '').toLowerCase() ||
+      (meta.haEntityId ? String(meta.haEntityId).split('.')[0] : '');
+
+    const isCamera = (camKey === 'camera') || (domGuess === 'camera');
+
+    if (isCamera) {
+      const init = getInit();
+
+      // Танай device дээр edgeId / src талбарууд өөр нэртэй байж болох тул fallback хийж өглөө
+      const edgeId =
+        meta.edgeId ?? meta.edge_id ?? meta.edge ?? meta.edgeName ?? meta.edgeCode ?? null;
+
+      const src =
+        meta.cameraSrc ??
+        meta.camera_src ??
+        meta.src ??
+        meta.streamSrc ??
+        meta.stream_src ??
+        meta.entityId ??         // заримдаа src-г entityId дээр хийсэн байдаг
+        meta.haEntityId ??
+        null;
+
+      // renderCameraPopup нь device.edgeId + device.cameraSrc гэж уншдаг болохоор map хийж өгнө
+      const device = {
+        ...meta,
+        edgeId: edgeId,
+        cameraSrc: src,
+        name: meta.name || meta.label || 'Camera',
+      };
+
+      // renderCameraPopup дотроо popupEl.innerHTML set хийдэг
+      await renderCameraPopup(devicePopupEl, device, init);
+
+      // ✅ popup байрлалыг зөв тавьж, HTML-ийг харуулна
+      showDevicePopup(ev.clientX, ev.clientY, devicePopupEl.innerHTML);
+
+      // camera popup дээр нэмэлт handler хэрэггүй (renderCameraPopup дотор img.onclick байгаа)
+      return;
+    }
+
+    // ------------------------------
+    // ✅ 2) Normal devices (existing)
+    // ------------------------------
     const sensors = Array.isArray(meta.sensors) ? meta.sensors : [];
 
     const entityId =
@@ -509,24 +676,21 @@ async function handleDeviceClick(ev, meta){
     const name = meta.name || meta.label || meta.deviceKey || entityId || 'Device';
 
     const haState = entityId ? await haGetState(entityId) : null;
-    const uiType  = detectUiTypeForDevice(domain, meta, haState);
-    const ctx     = { name, domain, entityId, meta, haState, sensors };
+    const uiType = detectUiTypeForDevice(domain, meta, haState);
+    const ctx = { name, domain, entityId, meta, haState, sensors };
 
     let html;
-    if (sensors.length && (uiType === 'climate' || uiType === 'toggle' || uiType === 'cover')){
-      // multi-sensor thermostat / light / switch → sensors + control
+    if (sensors.length && (uiType === 'climate' || uiType === 'toggle' || uiType === 'cover')) {
       html = buildSensorsWithControlsPopupHtml(uiType, ctx);
-    } else if (sensors.length){
-      // зөвхөн sensors
+    } else if (sensors.length) {
       html = buildSensorsPopupHtml(meta, sensors);
     } else {
-      // single entity → хуучин popup
       html = buildDevicePopupHtml(uiType, ctx);
     }
 
     showDevicePopup(ev.clientX, ev.clientY, html);
     attachDevicePopupHandlers(uiType, ctx);
-  }catch(e){
+  } catch (e) {
     console.error('handleDeviceClick error', e);
   }
 }
@@ -914,8 +1078,8 @@ function updateDeviceFilterAvailability(devices){
   }
 }
 
-window.PBD = window.PBD || {};
-window.PBD.setDevices = function(devices){
+window.PBD_APP = window.PBD_APP || {};
+window.PBD_APP.setDevices = function(devices){
   try{
     const H = (window._pbdMeta?.global?.ceilingHeight) ?? 2.8;
     S.clearDevicePins();
@@ -1531,23 +1695,91 @@ window.start = async () => {
       if (!baseUrl || !siteId || !jwt) {
         return fetch('./pbd.json').then(r => r.json());
       }
-      const auth = /^Bearer /.test(jwt) ? jwt : `Bearer ${jwt}`;
-      const latestUrl = `${baseUrl}/api/pbd/latest?siteId=${encodeURIComponent(siteId)}${fid ? `&floorId=${encodeURIComponent(fid)}` : ""}`;
-      let latestRes = await fetch(latestUrl, { headers: { Authorization: auth }, cache: 'no-store' });
+
+      const auth = /^Bearer\s/.test(jwt) ? jwt : `Bearer ${jwt}`;
+      const latestUrl =
+        `${baseUrl}/api/pbd/latest?siteId=${encodeURIComponent(siteId)}${fid ? `&floorId=${encodeURIComponent(fid)}` : ""}`;
+
+      // 1) latest fetch
+      let latestRes = await fetch(latestUrl, {
+        headers: { Authorization: auth },
+        cache: 'no-store',
+      });
+
+      // 2) latest body-г нэг удаа уншиж log + parse
+      let latestText = '';
+      try {
+        console.log("[PBD] latest status", latestRes.status);
+        latestText = await latestRes.text();
+        console.log("[PBD] latest body", latestText.slice(0, 200));
+      } catch (e) {
+        console.log("[PBD] latest read error", e);
+      }
+
+      // 3) fallback (legacy)
       if (!latestRes.ok) {
         const legacy = `${baseUrl}/api/site/${siteId}/pbd/latest`;
-        latestRes = await fetch(legacy, { headers: { Authorization: auth }, cache: 'no-store' });
+        latestRes = await fetch(legacy, {
+          headers: { Authorization: auth },
+          cache: 'no-store',
+        });
+        console.log("[PBD] legacy status", latestRes.status);
+
+        latestText = await latestRes.text();
+        console.log("[PBD] legacy body", latestText.slice(0, 200));
+
         if (!latestRes.ok) throw new Error('latest ' + latestRes.status);
       }
-      const latest = await latestRes.json();
-      const metaUrl = latest.url || latest.file?.url || latest.data?.url || latest.result?.url;
+
+      // 4) latest parse
+      let latest;
+      try {
+        latest = JSON.parse(latestText || '{}');
+      } catch (e) {
+        throw new Error('latest JSON parse error');
+      }
+
+      // 5) metaUrl fallback:
+      // - зарим үед latest дээр url байхгүй, зөвхөн version (h_xxx) байдаг
+      const version = latest.version || latest.data?.version || latest.result?.version;
+      const metaUrl =
+        latest.url ||
+        latest.file?.url ||
+        latest.data?.url ||
+        latest.result?.url ||
+        (version && fid
+          ? `/cdn/pbd/${siteId}/${fid}/${version}.json`
+          : null);
+
       if (!metaUrl) throw new Error('No PBD URL in latest payload');
+
       const abs = /^https?:\/\//i.test(metaUrl) ? metaUrl : `${baseUrl}${metaUrl}`;
-      const bust = (latest.version || "") + "-" + Date.now();
-      const pbdRes = await fetch(`${abs}${abs.includes('?') ? '&' : '?'}_=${bust}`, { headers: { Authorization: auth }, cache: 'no-store' });
+      const bust = `${version || ''}-${Date.now()}`;
+
+      console.log('[PBD] latestUrl=', latestUrl);
+      console.log('[PBD] metaUrl=', metaUrl);
+      console.log('[PBD] abs=', abs);
+
+      // 6) pbd fetch (+ cache bust)
+      const pbdUrl = `${abs}${abs.includes('?') ? '&' : '?'}_=${encodeURIComponent(bust)}`;
+      const pbdRes = await fetch(pbdUrl, {
+        headers: { Authorization: auth },
+        cache: 'no-store',
+      });
+
+      console.log("[PBD] pbd status", pbdRes.status);
+      const pbdText = await pbdRes.text();
+      console.log("[PBD] pbd body head", pbdText.slice(0, 200));
+
       if (!pbdRes.ok) throw new Error('pbd ' + pbdRes.status);
-      return pbdRes.json();
+
+      try {
+        return JSON.parse(pbdText || '{}');
+      } catch {
+        throw new Error('pbd JSON parse error');
+      }
     };
+
 
     const pbd = await loadPBD();
 
@@ -1567,7 +1799,7 @@ window.start = async () => {
     const devices = enrichDevicesWithRoomCenter(apiDevices);
     console.log('[PBD] devices after enrich:', devices);
 
-    window.PBD.setDevices(devices);
+    window.PBD_APP.setDevices(devices);
 
     loading.remove();
     fitToContent(1.25);
@@ -1577,6 +1809,153 @@ window.start = async () => {
     loading.textContent = 'ERR: ' + (e?.message || e);
   }
 };
+
+function buildSrcCandidates(src) {
+  const s = String(src || '').trim();
+  if (!s) return [];
+
+  const cand = [
+    s,                                  // camera.192_168_1_173
+    s.replace(/\./g, '_'),              // camera_192_168_1_173
+    s.replace(/^camera\./, ''),         // 192_168_1_173
+    s.replace(/^camera\./, '').replace(/\./g, '_'), // 192_168_1_173 (dot->underscore)
+  ];
+
+  // unique
+  return [...new Set(cand.filter(Boolean))];
+}
+
+async function fetchSnapshotObjectUrlRaw({ baseUrl, jwt, edgeId, src }) {
+  const auth = jwt ? (/^Bearer /.test(jwt) ? jwt : `Bearer ${jwt}`) : null;
+
+  const url =
+    `${baseUrl}/api/cam/${encodeURIComponent(edgeId)}/api/frame.jpeg` +
+    `?src=${encodeURIComponent(src)}&t=${Date.now()}`;
+
+  console.log('[SNAP] try src=', src);
+  const res = await fetch(url, {
+    headers: auth ? { Authorization: auth } : {},
+    cache: 'no-store',
+  });
+
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '');
+    throw new Error(`snapshot ${res.status} :: ${txt.slice(0, 120)}`);
+  }
+
+  const blob = await res.blob();
+  return URL.createObjectURL(blob);
+}
+
+async function fetchSnapshotWithCandidates({ baseUrl, jwt, edgeId, src }) {
+  const candidates = buildSrcCandidates(src);
+  let lastErr = null;
+
+  for (const c of candidates) {
+    try {
+      return await fetchSnapshotObjectUrlRaw({ baseUrl, jwt, edgeId, src: c });
+    } catch (e) {
+      lastErr = e;
+      console.warn('[SNAP] fail', String(e));
+    }
+  }
+
+  throw lastErr || new Error('snapshot failed');
+}
+
+async function fetchSnapshotObjectUrl({ baseUrl, jwt, edgeId, src }) {
+  const auth = jwt ? (/^Bearer /.test(jwt) ? jwt : `Bearer ${jwt}`) : null;
+
+  const url =
+    `${baseUrl}/api/cam/${encodeURIComponent(edgeId)}/api/frame.jpeg` +
+    `?src=${encodeURIComponent(src)}&t=${Date.now()}`;
+
+  console.log('[SNAP] url=', url);
+  console.log('[SNAP] jwt?', !!jwt, 'len=', (jwt || '').length);
+
+  const res = await fetch(url, {
+    headers: auth ? { Authorization: auth } : {},
+    cache: 'no-store',
+  });
+
+  console.log('[SNAP] status=', res.status);
+
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '');
+    console.warn('[SNAP] error body=', txt.slice(0, 300));
+    throw new Error(`snapshot ${res.status}`);
+  }
+
+  const blob = await res.blob();
+  return URL.createObjectURL(blob);
+}
+
+
+async function renderCameraPopup(popupEl, device, ctx) {
+  const baseUrl = ctx.baseUrl;
+  const jwt = ctx.jwt;
+
+  const edgeId =
+    device.edgeId ?? device.edge_id ?? device.edge ?? device.edgeName ?? null;
+
+  const src =
+    device.cameraSrc ||
+    device.cameraEntityId ||
+    device.haEntityId ||
+    device.entityId ||
+    null;
+
+  console.log('[PBD] renderCameraPopup edgeId=', edgeId, 'src=', src);
+
+  popupEl.innerHTML = `
+    <div class="pbd-popup-title">${device.name || 'Camera'}</div>
+    <div class="pbd-popup-body">
+      <div id="snapWrap" style="margin-top:8px;border-radius:10px;overflow:hidden;background:#111;position:relative;">
+        <div style="aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;color:#aaa;">
+          Loading snapshot...
+        </div>
+      </div>
+      <div style="margin-top:6px;color:#9aa0a6;font-size:12px;">
+        ${edgeId && src ? '' : 'No camera source linked'}
+      </div>
+    </div>
+  `;
+
+  if (!edgeId || !src) return;
+
+  try {
+    // ✅ candidate-уудтай татна
+    const objUrl = await fetchSnapshotWithCandidates({ baseUrl, jwt, edgeId, src });
+
+    const snapWrap = popupEl.querySelector('#snapWrap');
+    snapWrap.innerHTML = `
+      <img id="snapImg" src="${objUrl}" style="width:100%;height:100%;display:block;object-fit:cover;aspect-ratio:16/9;cursor:pointer;" />
+      <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;">
+        <div style="font-size:44px;color:white;opacity:.85;">▶</div>
+      </div>
+    `;
+
+    const img = snapWrap.querySelector('#snapImg');
+    img.onclick = () => openCameraLive({ edgeId, src, name: device.name || 'Camera' });
+
+    // ✅ leak-ээс сэргийлж (заавал биш ч зөв)
+    img.onload = () => { try { URL.revokeObjectURL(objUrl); } catch {} };
+
+  } catch (e) {
+    console.warn('[SNAP] render error', e);
+    const snapWrap = popupEl.querySelector('#snapWrap');
+    snapWrap.innerHTML = `
+      <div style="aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;color:#f88;">
+        Snapshot error
+      </div>
+    `;
+  }
+}
+
+function openCameraLive({ edgeId, src, name }) {
+  const payload = { type: 'open_live', edgeId, src, name };
+  if (window.PBD?.postMessage) window.PBD.postMessage(JSON.stringify(payload));
+}
 
 
 </script>

@@ -3,10 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'app/routes.dart';
 import 'app/theme.dart';
+import 'package:media_kit/media_kit.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await AppRoutes.initBindings(); // ← нэмэгдлээ
+  MediaKit.ensureInitialized();
   runApp(const _App());
 }
 

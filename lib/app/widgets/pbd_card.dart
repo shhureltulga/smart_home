@@ -1,10 +1,14 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:smart_home/app/data/api_client.dart';
+import 'package:smart_home/app/widgets/camera_live_screen.dart';
 
 class PbdCardController {
   void Function(List<Map<String, dynamic>>)? setDevices;
   void Function(String deviceId, String action, dynamic value)? sendCmdToJs;
+  // ✅ NEW: JS -> Flutter camera live open
+  void Function(String edgeId, String src, String? name)? openCameraLive;
 }
 
 class PbdCard extends StatefulWidget {
@@ -47,6 +51,58 @@ class _PbdCardState extends State<PbdCard> with WidgetsBindingObserver {
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..addJavaScriptChannel('APPLOG',
           onMessageReceived: (m) => debugPrint('[PBD] ${m.message}'))
+
+      ..addJavaScriptChannel(
+        'PBD',
+        onMessageReceived: (m) async {
+          try {
+            final obj = jsonDecode(m.message);
+
+            // ✅ 1) command хэвээр
+            if (obj is Map && obj['type'] == 'device_command') {
+              final deviceId = obj['deviceId'] as String?;
+              final action = obj['action'] as String?;
+              final value = obj['value'];
+              if (deviceId != null && action != null) {
+                await ApiClient.I.sendDeviceCommand(deviceId: deviceId, action: action, value: value);
+              }
+              return;
+            }
+
+            // ✅ 2) NEW: device click -> camera preview sheet
+            if (obj is Map && (obj['type'] == 'device_click' || obj['type'] == 'open_device')) {
+              final d = Map<String, dynamic>.from(obj['device'] ?? {});
+              final domain = (d['domain'] ?? '').toString().toLowerCase();
+              final label = (d['label'] ?? '').toString().toLowerCase();
+
+              final isCam = (domain == 'camera') || (label == 'camera');
+              if (!isCam) return;
+
+              // ЭНД ЧИНИЙ BACKEND-ЭЭС ИРЭХ ТАЛБАРУУД:
+              // edgeId: edge_nas_01
+              // cameraSrc: camera_192_168_1_173  (эсвэл src)
+              final edgeId = (d['edgeId'] ?? d['edge_id'] ?? d['edge'] ?? '').toString();
+              final src = (d['cameraSrc'] ?? d['src'] ?? '').toString();
+              final title = (d['name'] ?? d['title'] ?? 'Camera').toString();
+
+              if (edgeId.isEmpty || src.isEmpty) {
+                debugPrint('[PBD] camera missing edgeId/src: $d');
+                return;
+              }
+
+              if (!mounted) return;
+              _openCameraPreviewSheet(edgeId: edgeId, src: src, title: title);
+              return;
+            }
+
+            debugPrint('[PBD MSG] $obj');
+          } catch (e) {
+            debugPrint('[PBD PARSE ERR] $e | raw=${m.message}');
+          }
+        },
+      )
+
+
       ..setBackgroundColor(const Color(0x00000000))
       ..setNavigationDelegate(
         NavigationDelegate(
@@ -147,6 +203,28 @@ class _PbdCardState extends State<PbdCard> with WidgetsBindingObserver {
     }
   }
 
+  void _openCameraPreviewSheet({
+  required String edgeId,
+  required String src,
+  required String title,
+  }) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF0F1115),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (ctx) => _CameraPreviewSheet(
+        baseUrl: widget.baseUrl,
+        jwt: widget.jwt,
+        edgeId: edgeId,
+        src: src,
+        title: title,
+      ),
+    );
+  }
+
+
   @override
   Widget build(BuildContext context) {
     // Жирийн карт — fullscreen үед WebView-г картанд үзүүлэхгүй (нэг л газар амьдрах ёстой)
@@ -207,6 +285,96 @@ class _PbdCardState extends State<PbdCard> with WidgetsBindingObserver {
 
 
 }
+
+class _CameraPreviewSheet extends StatelessWidget {
+  final String baseUrl;
+  final String jwt;
+  final String edgeId;
+  final String src;
+  final String title;
+
+  const _CameraPreviewSheet({
+    required this.baseUrl,
+    required this.jwt,
+    required this.edgeId,
+    required this.src,
+    required this.title,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final snapshotUrl =
+        '$baseUrl/api/cam/$edgeId/api/frame.jpeg?src=${Uri.encodeComponent(src)}&t=${DateTime.now().millisecondsSinceEpoch}';
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(title,
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+              ),
+              IconButton(
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.close),
+              )
+            ],
+          ),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(14),
+            child: AspectRatio(
+              aspectRatio: 16 / 9,
+              child: InkWell(
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => CameraLiveScreen(
+                        edgeId: edgeId,
+                        src: src,
+                        baseUrl: baseUrl,
+                        title: title,
+                        showDebug: true,
+                      ),
+                    ),
+                  );
+                },
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    Image.network(
+                      snapshotUrl,
+                      fit: BoxFit.cover,
+                      headers: {'Authorization': 'Bearer $jwt'},
+                      errorBuilder: (_, __, ___) => Container(
+                        color: Colors.black26,
+                        child: const Center(child: Icon(Icons.videocam_off)),
+                      ),
+                    ),
+                    Container(color: Colors.black.withOpacity(0.15)),
+                    const Center(child: Icon(Icons.play_circle_fill, size: 64)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          const Text(
+            'Snapshot дээр дарвал Live нээгдэнэ',
+            style: TextStyle(color: Colors.white70, fontSize: 12),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+
 
 class _CircleIconButton extends StatelessWidget {
   final IconData icon;

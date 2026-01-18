@@ -11,6 +11,7 @@ import 'package:smart_home/app/modules/shell/root_scaffold.dart';
 import 'package:smart_home/app/widgets/pbd_card.dart';
 import 'package:smart_home/app/widgets/pbd_floor_selector.dart';
 import 'package:smart_home/app/data/api_client.dart'; // ApiClient.I
+import 'package:smart_home/app/widgets/device_label_card.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -203,17 +204,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         physics: const AlwaysScrollableScrollPhysics(),
                         padding: const EdgeInsets.all(16),
                         children: [
-                          const SizedBox(height: 12),
-                          _DashboardHeader(
-                            outsideTemp: ov.weather?.tempC ?? 0,
-                            humidity: ov.weather?.humidity ?? 0,
-                            weatherTemp: (ov.weather?.tempC ?? 0).round(),
-                            windSpeed:
-                                (ov.weather?.windSpeedMs ?? 0).round(),
-                            rainProb:
-                                (ov.weather?.rainProb ?? 0).round(),
-                          ),
-                          const SizedBox(height: 12),
+                          // const SizedBox(height: 12),
+                          // _DashboardHeader(
+                          //   outsideTemp: ov.weather?.tempC ?? 0,
+                          //   humidity: ov.weather?.humidity ?? 0,
+                          //   weatherTemp: (ov.weather?.tempC ?? 0).round(),
+                          //   windSpeed:
+                          //       (ov.weather?.windSpeedMs ?? 0).round(),
+                          //   rainProb:
+                          //       (ov.weather?.rainProb ?? 0).round(),
+                          // ),
+                          // const SizedBox(height: 12),
 
                           if (_jwt != null) ...[
                             if (_loadingFloors) ...[
@@ -247,7 +248,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   siteId: _siteId!,
                                   floorId: _selectedFloorId,
                                   jwt: _jwt!,
-                                  height: 400,
+                                  height: 550,
                                   controller: _pbdCtrl,
                                   devices: _devices,
                                 )
@@ -467,7 +468,7 @@ class _DevicesListSliver extends StatelessWidget {
     required this.devices,
   });
 
-  @override
+ @override
   Widget build(BuildContext context) {
     if (devices.isEmpty) {
       return const SliverToBoxAdapter(
@@ -485,47 +486,24 @@ class _DevicesListSliver extends StatelessWidget {
       delegate: SliverChildBuilderDelegate(
         (ctx, index) {
           final d = devices[index];
-          final name = (d['label'] as String?)?.trim().isNotEmpty == true
-              ? d['label'] as String
-              : (d['name'] as String?) ?? 'Device';
-          final domain = (d['domain'] as String?) ?? '';
-          final isOn = (d['isOn'] as bool?) ?? false;
-          final sensors = (d['sensors'] as List<dynamic>?)
-                  ?.cast<Map<String, dynamic>>() ??
-              const <Map<String, dynamic>>[];
 
-          switch (domain) {
-            case 'light':
-              return _LightDeviceCard(
-                name: name,
-                isOn: isOn,
-                brightness: _findBrightness(sensors),
-              );
+          return DeviceLabelCard(
+            key: ValueKey(d['id'] ?? d['deviceKey']),
+            device: d,
+            onAction: (device, action, value) async {
+              final deviceId = device['id'] as String?; // Prisma Device.id
+              if (deviceId == null) return;
 
-            case 'switch':
-            case 'outlet':
-              return _SwitchDeviceCard(
-                name: name,
-                isOn: isOn,
-              );
+              // Debug хармаар байвал
+              // debugPrint('CMD $deviceId $action $value');
 
-            case 'climate':
-              return _ClimateThermostatCard(
-                name: name,
-                isOn: isOn,
-                setpoint: _findSetpoint(sensors),
-                temperature: _findTemperature(sensors),
-                humidity: _findHumidity(sensors),
-                battery: _findBattery(sensors),
+              await ApiClient.I.sendDeviceCommand(
+                deviceId: deviceId,
+                action: action,
+                value: value,
               );
-
-            case 'sensor':
-            default:
-              return _SensorDeviceCard(
-                name: name,
-                metrics: _buildSensorMetrics(sensors),
-              );
-          }
+            },
+          );
         },
         childCount: devices.length,
       ),
@@ -642,167 +620,6 @@ class _DevicesListSliver extends StatelessWidget {
   }
 }
 
-
-/* ------------------------ 1) LIGHT CARD ------------------------ */
-
-class _LightDeviceCard extends StatelessWidget {
-  final String name;
-  final bool isOn;
-  final double brightness;
-
-  const _LightDeviceCard({
-    required this.name,
-    required this.isOn,
-    required this.brightness,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return _DeviceBaseCard(
-      title: name,
-      trailing: Switch(
-        value: isOn,
-        onChanged: (_) {}, // TODO: команд илгээх
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              const Icon(Icons.lightbulb_outline),
-              const SizedBox(width: 8),
-              const Text('Brightness'),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Slider(
-                  value: brightness,
-                  min: 0,
-                  max: 100,
-                  onChanged: (_) {}, // TODO
-                ),
-              ),
-              Text('${brightness.toStringAsFixed(0)}%'),
-            ],
-          ),
-          const SizedBox(height: 4),
-        ],
-      ),
-    );
-  }
-}
-
-/* ------------------------ 2) SWITCH / OUTLET CARD ------------------------ */
-
-class _SwitchDeviceCard extends StatelessWidget {
-  final String name;
-  final bool isOn;
-
-  const _SwitchDeviceCard({
-    required this.name,
-    required this.isOn,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return _DeviceBaseCard(
-      title: name,
-      trailing: Switch(
-        value: isOn,
-        onChanged: (_) {}, // TODO
-      ),
-    );
-  }
-}
-
-/* ------------------------ 3) CLIMATE (THERMOSTAT) CARD ------------------------ */
-
-class _ClimateThermostatCard extends StatelessWidget {
-  final String name;
-  final bool isOn;
-  final double? setpoint;
-  final double? temperature;
-  final double? humidity;
-  final double? battery;
-
-  const _ClimateThermostatCard({
-    required this.name,
-    required this.isOn,
-    this.setpoint,
-    this.temperature,
-    this.humidity,
-    this.battery,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final sp = setpoint ?? 22.0;
-
-    return _DeviceBaseCard(
-      title: name,
-      subtitle: 'Thermostat',
-      trailing: Switch(
-        value: isOn,
-        onChanged: (_) {}, // TODO
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(height: 4),
-          const Text(
-            'Setpoint',
-            style: TextStyle(fontSize: 12, color: Colors.white70),
-          ),
-          const SizedBox(height: 4),
-          Row(
-            children: [
-              Expanded(
-                child: Slider(
-                  value: sp,
-                  min: 5,
-                  max: 35,
-                  onChanged: (_) {}, // TODO
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                '${sp.toStringAsFixed(1)}°C',
-                style: const TextStyle(fontWeight: FontWeight.w600),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              if (temperature != null) ...[
-                const Icon(Icons.thermostat_outlined, size: 16),
-                const SizedBox(width: 4),
-                Text('${temperature!.toStringAsFixed(1)}°C',
-                    style: const TextStyle(fontSize: 12)),
-              ],
-              if (humidity != null) ...[
-                const SizedBox(width: 16),
-                const Icon(Icons.water_drop_outlined, size: 16),
-                const SizedBox(width: 4),
-                Text('${humidity!.toStringAsFixed(0)}%',
-                    style: const TextStyle(fontSize: 12)),
-              ],
-              if (battery != null) ...[
-                const SizedBox(width: 16),
-                const Icon(Icons.battery_std, size: 16),
-                const SizedBox(width: 4),
-                Text('${battery!.toStringAsFixed(0)}%',
-                    style: const TextStyle(fontSize: 12)),
-              ],
-            ],
-          ),
-          const SizedBox(height: 4),
-        ],
-      ),
-    );
-  }
-}
-
 /* ------------------------ 4) SENSOR CARD ------------------------ */
 
 class _SensorMetric {
@@ -817,186 +634,78 @@ class _SensorMetric {
   });
 }
 
-class _SensorDeviceCard extends StatelessWidget {
-  final String name;
-  final List<_SensorMetric> metrics;
-
-  const _SensorDeviceCard({
-    required this.name,
-    required this.metrics,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return _DeviceBaseCard(
-      title: name,
-      subtitle: metrics.isEmpty ? 'Мэдрэгчийн дата алга байна.' : null,
-      trailing: const Icon(Icons.chevron_right),
-      child: Column(
-        children: [
-          for (final m in metrics) ...[
-            const SizedBox(height: 6),
-            Row(
-              children: [
-                Icon(m.icon, size: 18),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    m.label,
-                    style: const TextStyle(fontSize: 13),
-                  ),
-                ),
-                Text(
-                  m.value,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ],
-          const SizedBox(height: 4),
-        ],
-      ),
-    );
-  }
-}
-
-/* ------------------------ Суурь картын wrapper ------------------------ */
-
-class _DeviceBaseCard extends StatelessWidget {
-  final String title;
-  final String? subtitle;
-  final Widget? trailing;
-  final Widget? child;
-
-  const _DeviceBaseCard({
-    required this.title,
-    this.subtitle,
-    this.trailing,
-    this.child,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Container(
-      margin: const EdgeInsets.fromLTRB(12, 6, 12, 10),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFF17181B),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: cs.outlineVariant.withOpacity(.18)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.bolt, size: 18, color: Colors.amber.shade300),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  title,
-                  style: Theme.of(context).textTheme.titleMedium,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              if (trailing != null) trailing!,
-            ],
-          ),
-          if (subtitle != null) ...[
-            const SizedBox(height: 4),
-            Text(
-              subtitle!,
-              style: Theme.of(context)
-                  .textTheme
-                  .labelMedium
-                  ?.copyWith(color: Colors.white70),
-            ),
-          ],
-          if (child != null) ...[
-            const SizedBox(height: 8),
-            child!,
-          ],
-        ],
-      ),
-    );
-  }
-}
 
 /* ------------------------ Header/KPI/Stat ------------------------ */
 
-class _DashboardHeader extends StatelessWidget {
-  final double outsideTemp;
-  final double humidity;
-  final int weatherTemp;
-  final int windSpeed;
-  final int rainProb;
+// class _DashboardHeader extends StatelessWidget {
+//   final double outsideTemp;
+//   final double humidity;
+//   final int weatherTemp;
+//   final int windSpeed;
+//   final int rainProb;
 
-  const _DashboardHeader({
-    required this.outsideTemp,
-    required this.humidity,
-    required this.weatherTemp,
-    required this.windSpeed,
-    required this.rainProb,
-  });
+//   const _DashboardHeader({
+//     required this.outsideTemp,
+//     required this.humidity,
+//     required this.weatherTemp,
+//     required this.windSpeed,
+//     required this.rainProb,
+//   });
 
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final bg = cs.surfaceContainerHighest.withOpacity(0.15);
+//   @override
+//   Widget build(BuildContext context) {
+//     final cs = Theme.of(context).colorScheme;
+//     final bg = cs.surfaceContainerHighest.withOpacity(0.15);
 
-    return Column(
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: _KpiCard.big(
-                label: 'Гадна температур',
-                value: '${outsideTemp.toStringAsFixed(1)}°C',
-                icon: Icons.thermostat_outlined,
-                iconColor: const Color(0xFFFFA24C),
-                background: bg,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _KpiCard.big(
-                label: 'Чийгшил',
-                value: '${humidity.toStringAsFixed(1)}%',
-                icon: Icons.water_drop_outlined,
-                iconColor: const Color(0xFFFF8A3D),
-                background: bg,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        _InlineInfoCard(
-          items: [
-            _InlineItem(
-              icon: Icons.cloud_outlined,
-              label: 'Цаг агаар',
-              value: '$weatherTemp°C',
-            ),
-            _InlineItem(
-              icon: Icons.air_outlined,
-              label: 'Салхины хурд',
-              value: '$windSpeedм/с',
-            ),
-            _InlineItem(
-              icon: Icons.umbrella_outlined,
-              label: 'Тунадас магадлал',
-              value: '$rainProb%',
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-}
+//     return Column(
+//       children: [
+//         Row(
+//           children: [
+//             Expanded(
+//               child: _KpiCard.big(
+//                 label: 'Гадна температур',
+//                 value: '${outsideTemp.toStringAsFixed(1)}°C',
+//                 icon: Icons.thermostat_outlined,
+//                 iconColor: const Color(0xFFFFA24C),
+//                 background: bg,
+//               ),
+//             ),
+//             const SizedBox(width: 12),
+//             Expanded(
+//               child: _KpiCard.big(
+//                 label: 'Чийгшил',
+//                 value: '${humidity.toStringAsFixed(1)}%',
+//                 icon: Icons.water_drop_outlined,
+//                 iconColor: const Color(0xFFFF8A3D),
+//                 background: bg,
+//               ),
+//             ),
+//           ],
+//         ),
+//         const SizedBox(height: 12),
+//         _InlineInfoCard(
+//           items: [
+//             _InlineItem(
+//               icon: Icons.cloud_outlined,
+//               label: 'Цаг агаар',
+//               value: '$weatherTemp°C',
+//             ),
+//             _InlineItem(
+//               icon: Icons.air_outlined,
+//               label: 'Салхины хурд',
+//               value: '$windSpeedм/с',
+//             ),
+//             _InlineItem(
+//               icon: Icons.umbrella_outlined,
+//               label: 'Тунадас магадлал',
+//               value: '$rainProb%',
+//             ),
+//           ],
+//         ),
+//       ],
+//     );
+//   }
+// }
 
 class _KpiCard extends StatelessWidget {
   final String label;
