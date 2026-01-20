@@ -20,9 +20,9 @@ class _MainShellState extends State<MainShell> {
   // Табууд – body-г дотор нь өөр Scaffold ашиглахгүй байвал drawer автоматаар ажиллана.
   final List<Widget> _tabs = const [
     DashboardScreen(),                 // Нүүр
-    _Stub(title: 'Эрүүл мэнд хяналт'),
+    // _Stub(title: 'Эрүүл мэнд хяналт'),
     _Stub(title: 'Зардлын хяналт'),
-    _Stub(title: 'Хүүхдийн хяналт'),
+    // _Stub(title: 'Хүүхдийн хяналт'),
     _Stub(title: 'Профайл'),
   ];
 
@@ -58,21 +58,21 @@ class _MainShellState extends State<MainShell> {
                 selectedIcon: Icon(Icons.dashboard),
                 label: 'Гэр',
               ),
-              NavigationDestination(
-                icon: Icon(Icons.favorite_border),
-                selectedIcon: Icon(Icons.favorite),
-                label: 'Бие',
-              ),
+              // NavigationDestination(
+              //   icon: Icon(Icons.favorite_border),
+              //   selectedIcon: Icon(Icons.favorite),
+              //   label: 'Бие',
+              // ),
               NavigationDestination(
                 icon: Icon(Icons.payments_outlined),
                 selectedIcon: Icon(Icons.payments),
                 label: 'Зардал',
               ),
-              NavigationDestination(
-                icon: Icon(Icons.child_care_outlined),
-                selectedIcon: Icon(Icons.child_care),
-                label: 'Хүүхэд',
-              ),
+              // NavigationDestination(
+              //   icon: Icon(Icons.child_care_outlined),
+              //   selectedIcon: Icon(Icons.child_care),
+              //   label: 'Хүүхэд',
+              // ),
               NavigationDestination(
                 icon: Icon(Icons.person_outline),
                 selectedIcon: Icon(Icons.person),
